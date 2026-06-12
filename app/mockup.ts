@@ -1,95 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cheval Holdings — Private Wealth OS</title>
-<style>
-  :root{
-    --bg:#0f0d14; --panel:#16131d; --card:#1c1825; --card2:#221d2c;
-    --gold:#c9a24b; --gold-soft:rgba(201,162,75,.14);
-    --txt:#efe9df; --mut:#9b93a6; --line:#2a2535;
-    --green:#4ed18a; --green-soft:rgba(78,209,138,.13);
-    --red:#f06b5a; --red-soft:rgba(240,107,90,.12); --blue:#5b8cff; --purple:#a980ff; --teal:#46c5b8; --orange:#e6a24b;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--txt);font-family:Georgia,'Times New Roman',serif;-webkit-font-smoothing:antialiased}
-  .lbl{font-family:'Helvetica Neue',Arial,sans-serif;text-transform:uppercase;letter-spacing:.14em;font-size:10px;font-weight:700;color:var(--mut)}
-  .sans{font-family:'Helvetica Neue',Arial,sans-serif}
-  .app{display:flex;min-height:100vh}
-  /* sidebar */
-  .side{width:230px;background:var(--panel);border-right:1px solid var(--line);padding:22px 0;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
-  .brand{display:flex;align-items:center;gap:11px;padding:0 20px 18px}
-  .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#c9a24b,#7a5e22);display:flex;align-items:center;justify-content:center;color:#1a1410;font-size:19px}
-  .brand h1{font-size:15px;font-weight:600}
-  .brand p{font-size:9.5px;color:var(--mut);font-family:'Helvetica Neue',sans-serif;letter-spacing:.05em}
-  .navgrp{padding:13px 12px 2px}
-  .navgrp>.lbl{padding:0 8px 6px}
-  .nav{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;font-family:'Helvetica Neue',sans-serif;font-size:13px;color:#cfc8d8;cursor:pointer;margin-bottom:1px;user-select:none}
-  .nav:hover{background:var(--card)}
-  .nav.active{background:var(--gold-soft);color:#f4e6c4;font-weight:600}
-  .nav .ic{width:17px;text-align:center;font-size:14px;opacity:.85}
-  .lock{margin-left:auto;font-size:11px;opacity:.5}
-  /* main */
-  .main{flex:1;min-width:0}
-  .top{display:flex;align-items:center;gap:16px;padding:18px 30px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(15,13,20,.85);backdrop-filter:blur(8px);z-index:5}
-  .top h2{font-size:20px;font-weight:600}
-  .top .sub{font-size:12px;color:var(--mut);font-family:'Helvetica Neue',sans-serif}
-  .chip{display:flex;align-items:center;gap:7px;background:var(--green-soft);border:1px solid rgba(78,209,138,.3);color:var(--green);border-radius:20px;padding:6px 12px;font-family:'Helvetica Neue',sans-serif;font-size:11px;font-weight:600;margin-left:auto}
-  .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#c9a24b,#7a5e22);color:#1a1410;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:'Helvetica Neue',sans-serif}
-  .wrap{padding:24px 30px 60px}
-  .view{display:none} .view.on{display:block}
-  /* components */
-  .grid{display:grid;gap:16px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .card h3{font-size:14px;font-weight:600}
-  .ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-  .link{font-family:'Helvetica Neue',sans-serif;font-size:11px;color:var(--gold);font-weight:600;cursor:pointer}
-  .stats{display:grid;gap:14px;margin-bottom:16px}
-  .stat .lbl{margin-bottom:8px}
-  .stat .v{font-size:23px;font-weight:600;letter-spacing:-.5px}
-  .stat .d{font-family:'Helvetica Neue',sans-serif;font-size:11px;font-weight:600;margin-top:4px}
-  .up{color:var(--green)} .down{color:var(--red)} .neu{color:var(--mut)}
-  table{width:100%;border-collapse:collapse;font-family:'Helvetica Neue',sans-serif}
-  th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:700;padding:0 10px 9px;border-bottom:1px solid var(--line)}
-  td{padding:11px 10px;font-size:12.5px;border-bottom:1px solid var(--line)}
-  tr:last-child td{border-bottom:none}
-  td.r,th.r{text-align:right} td.num{font-variant-numeric:tabular-nums}
-  .sym{font-weight:700;color:var(--txt)} .muted{color:var(--mut);font-size:11px}
-  .pill{display:inline-block;font-family:'Helvetica Neue',sans-serif;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
-  .pill.g{background:var(--green-soft);color:var(--green)} .pill.gold{background:var(--gold-soft);color:var(--gold)}
-  .pill.b{background:rgba(91,140,255,.13);color:var(--blue)} .pill.r{background:var(--red-soft);color:var(--red)} .pill.m{background:var(--card2);color:var(--mut)}
-  .donut{width:140px;height:140px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative}
-  .donut::after{content:'';position:absolute;width:90px;height:90px;border-radius:50%;background:var(--card)}
-  .donut .ctr{position:relative;z-index:2;text-align:center} .donut .ctr b{font-size:15px} .donut .ctr span{font-size:9px;color:var(--mut);font-family:'Helvetica Neue',sans-serif;display:block}
-  .dwrap{display:flex;align-items:center;gap:20px}
-  .leg{flex:1} .leg .row{display:flex;align-items:center;gap:9px;padding:5.5px 0;font-family:'Helvetica Neue',sans-serif;font-size:12px;border-bottom:1px solid var(--line)} .leg .row:last-child{border:none}
-  .leg .dot{width:9px;height:9px;border-radius:3px} .leg .amt{margin-left:auto;font-weight:600}
-  .chart svg{width:100%;height:160px;display:block}
-  .two{grid-template-columns:1fr 1fr} .three{grid-template-columns:repeat(3,1fr)} .four{grid-template-columns:repeat(4,1fr)}
-  .item{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line)} .item:last-child{border:none}
-  .ico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;background:var(--card2)}
-  .item .t{font-size:13px;font-weight:600} .item .s{font-size:11px;color:var(--mut);font-family:'Helvetica Neue',sans-serif;margin-top:1px}
-  .item .meta{margin-left:auto;text-align:right;font-family:'Helvetica Neue',sans-serif} .item .meta .a{font-size:12.5px;font-weight:600} .item .meta .dd{font-size:10px;color:var(--mut)}
-  .prop{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card2)}
-  .prop .ph{height:96px;display:flex;align-items:flex-end;padding:12px;font-size:34px}
-  .prop .pb{padding:14px} .prop .pb .nm{font-size:14px;font-weight:600} .prop .pb .ad{font-size:10.5px;color:var(--mut);font-family:'Helvetica Neue',sans-serif;margin-top:2px}
-  .kv{display:flex;justify-content:space-between;font-family:'Helvetica Neue',sans-serif;font-size:11.5px;padding:5px 0;border-bottom:1px solid var(--line)} .kv:last-child{border:none} .kv .k{color:var(--mut)}
-  .bar{height:7px;background:var(--card2);border-radius:6px;overflow:hidden;margin-top:8px} .bar i{display:block;height:100%;background:var(--gold);border-radius:6px}
-  .wallet{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--card2)}
-  .sec .srow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-family:'Helvetica Neue',sans-serif;font-size:12.5px} .sec .srow:last-child{border:none}
-  .sec .ok{color:var(--green);font-size:14px} .sec .srow .r{margin-left:auto;color:var(--mut);font-size:10.5px}
-  .folder{display:flex;align-items:center;gap:11px;padding:14px;border:1px solid var(--line);border-radius:11px;background:var(--card2);cursor:pointer} .folder:hover{border-color:var(--gold-soft)}
-  .folder .fi{font-size:20px} .folder .fn{font-size:13px;font-weight:600} .folder .fc{font-size:10.5px;color:var(--mut);font-family:'Helvetica Neue',sans-serif}
-  .ai{background:linear-gradient(150deg,#1a2420,#16131d);border-color:rgba(78,209,138,.25)}
-  .ai .insight{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)} .ai .insight:last-child{border:none}
-  .ai .insight p{font-size:12.5px;line-height:1.55;font-family:'Helvetica Neue',sans-serif} .ai .insight p b{font-weight:700}
-  .foot{text-align:center;color:var(--mut);font-family:'Helvetica Neue',sans-serif;font-size:11px;margin-top:28px}
-  h4.sec-h{font-size:18px;font-weight:600;margin:4px 0 14px}
-</style>
-</head>
-<body>
-<div class="app">
+/* Auto-generated from the Cheval Holdings mockup. The markup + nav-switching
+   script are injected client-side; replace sections with real React/data over time. */
+export const BODY = `<div class="app">
   <aside class="side">
     <div class="brand"><div class="logo">♞</div><div><h1>Cheval Holdings</h1><p class="sans">Private Wealth OS</p></div></div>
     <div class="navgrp"><div class="lbl">Overview</div>
@@ -1024,9 +935,8 @@
       <div class="foot">Mockup · Cheval Holdings Private Wealth OS · illustrative figures · the app reads &amp; reports — it never moves funds</div>
     </div>
   </div>
-</div>
-<script>
-  const titles = {
+</div>`
+export const NAVSCRIPT = `const titles = {
     dashboard:['Cheval Holdings','Consolidated · as of Jun 9, 2026 · read-only feeds'],
     trading:['Intermediate-Term Trading — FX','G10 currencies · AI-assisted · 🔒 TradeSmart read-only feed'],
     alphabook:['Gallop — Alpha Book','High-conviction tactical sprints · cross-asset · tight stops'],
@@ -1047,7 +957,7 @@
     thesis:['Investment Thesis','Per-account thesis, rules &amp; review cadence'],
     affiliates:['Affiliate Partnerships','Referral &amp; JV income · commissions · payouts'],
     agents:['AI Agents','18 agents across every section · supervised · read-only'],
-    advisory:['Advisory Boards','Cheval\'s advisors + the boards Michele serves on'],
+    advisory:['Advisory Boards','Cheval\\'s advisors + the boards Michele serves on'],
     capitalraising:['Capital Raising','Fundraising pipeline · prospects · soft commitments'],
     directory:['Investor Directory','LP CRM · accreditation · capital across deals'],
     products:['Products','Digital products &amp; offers · sales · revenue']
@@ -1062,7 +972,4 @@
     document.getElementById('pageSub').innerHTML=titles[v][1];
     window.scrollTo(0,0);
   }
-  document.querySelectorAll('[data-v]').forEach(n=>n.addEventListener('click',function(e){e.stopPropagation();switchView(n.dataset.v);}));
-</script>
-</body>
-</html>
+  document.querySelectorAll('[data-v]').forEach(n=>n.addEventListener('click',function(e){e.stopPropagation();switchView(n.dataset.v);}));`
