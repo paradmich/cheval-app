@@ -35,8 +35,9 @@ export const maxDuration = 60
 const FRANKFURTER = 'https://api.frankfurter.dev/v1'
 const SYMBOLS = 'EUR,GBP,JPY,AUD,CAD,CHF,SEK'
 
-// Apify economic-calendar actor (free). ~ is the API path separator for "/".
-const APIFY_CALENDAR_ACTOR = 'gochujang~economic-calendar-tracker'
+// Apify actors (~ is the API path separator for "/").
+const APIFY_CALENDAR_ACTOR = 'gochujang~economic-calendar-tracker' // free
+const APIFY_NEWS_ACTOR = 'cloud9_ai~investing-news-scraper' // pay-per-item
 const CALENDAR_CCYS = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD']
 
 const CACHE_TTL_MS = 15 * 60 * 1000
@@ -230,6 +231,48 @@ async function fetchApifyCalendar(token: string): Promise<CalendarEvent[] | null
   }
 }
 
+interface ApifyNewsItem {
+  title: string
+  link: string
+  pubDate: string
+  category: string
+}
+
+export interface Headline {
+  title: string
+  url: string
+  pubDate: string
+}
+
+/**
+ * Pull recent FX / economy headlines from Apify (Investing.com). Returns null
+ * on failure so commentary still runs without news grounding.
+ */
+async function fetchApifyNews(token: string): Promise<Headline[] | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_NEWS_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 55_000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({ categories: ['forex', 'economy'], maxResults: 14 }),
+    })
+    if (!res.ok) return null
+    const items = (await res.json()) as ApifyNewsItem[]
+    if (!Array.isArray(items) || items.length === 0) return null
+    return items
+      .filter((it) => it.title?.trim())
+      .map((it) => ({ title: it.title.trim(), url: it.link, pubDate: it.pubDate }))
+      .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate))
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Rule-based fallback signal when the AI layer is unavailable. */
 function fallbackSignal(q: PairQuote): PairSignal {
   const basis = q.change1w ?? q.change1d ?? 0
@@ -291,6 +334,7 @@ async function generateAI(
   dxyNow: number,
   banks: typeof CENTRAL_BANKS,
   events: ReturnType<typeof upcoming>,
+  headlines: Headline[] | null,
 ): Promise<{ commentary: Commentary[]; signals: PairSignal[] } | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
 
@@ -308,6 +352,7 @@ async function generateAI(
       .slice(0, 5)
       .map((e) => ({ event: e.event, ccy: e.ccy, impact: e.impact, inDays: e.inDays })),
     macro: { us10yPct: REFERENCE_MACRO.us10yPct, vix: REFERENCE_MACRO.vix },
+    recentHeadlines: headlines?.slice(0, 12).map((h) => h.title) ?? [],
   }
 
   const res = await client.messages.create({
@@ -318,11 +363,14 @@ async function generateAI(
     system:
       'You are the FX Market Research agent for a private wealth office. ' +
       'Given live G10 spot rates with 1D/1W changes, central-bank policy, the ' +
-      'economic calendar, and reference macro, produce concise institutional FX ' +
-      'commentary and a directional signal for each pair. Ground every claim in ' +
-      'the data provided — rate differentials, momentum, and upcoming catalysts. ' +
-      'This is research only; never instruct to place a trade. Return exactly 3 ' +
-      'commentary insights and one signal per pair.',
+      'economic calendar, reference macro, and recent market headlines, produce ' +
+      'concise institutional FX commentary and a directional signal for each pair. ' +
+      'Ground every claim in the data provided — rate differentials, momentum, ' +
+      'upcoming catalysts, and the headlines. When a headline explains a move or ' +
+      'a catalyst (e.g. a geopolitical event, an intervention call, a bank ' +
+      'recommendation), reference that driver concretely rather than describing ' +
+      'price action generically. This is research only; never instruct to place a ' +
+      'trade. Return exactly 3 commentary insights and one signal per pair.',
     messages: [
       {
         role: 'user',
@@ -370,14 +418,17 @@ export async function GET() {
     )
   }
 
-  // Economic calendar: live via Apify when a token is set, else curated.
+  // Economic calendar + news: live via Apify when a token is set, else curated.
   const token = process.env.APIFY_TOKEN
-  const apifyCalendar = token ? await fetchApifyCalendar(token) : null
+  const [apifyCalendar, headlines] = token
+    ? await Promise.all([fetchApifyCalendar(token), fetchApifyNews(token)])
+    : [null, null]
   const calendarLive = !!apifyCalendar
+  const newsLive = !!headlines
   const events = upcoming(apifyCalendar ?? ECONOMIC_CALENDAR, today)
   const nextHigh = events.find((e) => e.impact === 'High') ?? events[0]
 
-  const ai = await generateAI(quotes, dxyNow, CENTRAL_BANKS, events)
+  const ai = await generateAI(quotes, dxyNow, CENTRAL_BANKS, events, headlines)
   const signals: PairSignal[] = ai?.signals?.length
     ? ai.signals
     : quotes.map(fallbackSignal)
@@ -397,6 +448,8 @@ export async function GET() {
     live,
     aiEnabled: !!ai,
     calendarLive,
+    newsLive,
+    headlines: (headlines ?? []).slice(0, 4),
     generatedAt: new Date().toISOString(),
     stats: {
       dxy: dxyNow.toFixed(1),
