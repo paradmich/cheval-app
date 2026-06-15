@@ -283,49 +283,8 @@ export const BODY = `<div class="app">
       </div>
     </section>
 
-    <!-- ===== FX MARKET RESEARCH ===== -->
-    <section class="view" id="fxresearch">
-      <div class="grid four stats">
-        <div class="card stat"><div class="lbl">Dollar Index (DXY)</div><div class="v">104.2</div><div class="d up">▲ +0.3%</div></div>
-        <div class="card stat"><div class="lbl">US 10-Year</div><div class="v">4.28%</div><div class="d up">▲ +4 bp</div></div>
-        <div class="card stat"><div class="lbl">Risk (VIX)</div><div class="v">14.1</div><div class="d neu">Calm · risk-on</div></div>
-        <div class="card stat"><div class="lbl">Next High-Impact</div><div class="v" style="font-size:17px">US CPI</div><div class="d down">▲ in 2 days</div></div>
-      </div>
-      <div class="grid two" style="margin-bottom:16px">
-        <div class="card"><div class="ch"><h3>Watchlist · Major Pairs</h3><span class="muted sans">live · 15-min delayed feed</span></div>
-          <table><thead><tr><th>Pair</th><th class="r">Rate</th><th class="r">1D</th><th class="r">1W</th><th class="r">Trend</th><th class="r">AI Signal</th></tr></thead><tbody>
-            <tr><td><span class="sym">EUR/USD</span></td><td class="r num">1.0894</td><td class="r num up">+0.4%</td><td class="r num up">+0.8%</td><td class="r">↗</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">GBP/USD</span></td><td class="r num">1.2712</td><td class="r num up">+0.3%</td><td class="r num up">+0.6%</td><td class="r">↗</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">USD/JPY</span></td><td class="r num">155.90</td><td class="r num down">−0.5%</td><td class="r num down">−0.9%</td><td class="r">↘</td><td class="r"><span class="pill r">Short USD</span></td></tr>
-            <tr><td><span class="sym">AUD/USD</span></td><td class="r num">0.6612</td><td class="r num up">+0.5%</td><td class="r num up">+1.1%</td><td class="r">↗</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">USD/CAD</span></td><td class="r num">1.3688</td><td class="r num down">−0.2%</td><td class="r num down">−0.4%</td><td class="r">↘</td><td class="r"><span class="pill b">Neutral</span></td></tr>
-            <tr><td><span class="sym">USD/CHF</span></td><td class="r num">0.8902</td><td class="r num down">−0.3%</td><td class="r num down">−0.5%</td><td class="r">↘</td><td class="r"><span class="pill b">Neutral</span></td></tr>
-          </tbody></table></div>
-        <div class="card ai"><div class="ch"><h3>✦ AI Market Commentary</h3><span class="pill g">Updated 6m ago</span></div>
-          <div class="insight"><span>🧭</span><p><b>USD softening into CPI.</b> Momentum and rate-cut pricing favor <b>EUR</b> and <b>GBP</b> longs; DXY capped near 104.6 resistance.</p></div>
-          <div class="insight"><span>💴</span><p><b>JPY:</b> short-USD/JPY supported by narrowing differentials, but watch <b>intervention risk above 158</b> and the Jul BoJ meeting.</p></div>
-          <div class="insight"><span>🎯</span><p><b>Carry:</b> long AUD/JPY favored while risk is calm. <b>CPI (Jun 12) is the key event</b> — reduce size into the print.</p></div></div>
-      </div>
-      <div class="grid two">
-        <div class="card"><div class="ch"><h3>Economic Calendar</h3><span class="link">Full calendar →</span></div>
-          <table><thead><tr><th>When</th><th>Event</th><th class="r">Ccy</th><th class="r">Impact</th><th class="r">Forecast</th></tr></thead><tbody>
-            <tr><td>Today 8:30</td><td>Initial Jobless Claims</td><td class="r">USD</td><td class="r"><span class="pill gold">Med</span></td><td class="r num">218K</td></tr>
-            <tr><td>Jun 12</td><td>CPI (YoY)</td><td class="r">USD</td><td class="r"><span class="pill r">High</span></td><td class="r num">3.2%</td></tr>
-            <tr><td>Jun 12</td><td>FOMC Rate Decision</td><td class="r">USD</td><td class="r"><span class="pill r">High</span></td><td class="r num">Hold</td></tr>
-            <tr><td>Jun 14</td><td>UK GDP (MoM)</td><td class="r">GBP</td><td class="r"><span class="pill gold">Med</span></td><td class="r num">0.2%</td></tr>
-            <tr><td>Jun 18</td><td>RBA Minutes</td><td class="r">AUD</td><td class="r"><span class="pill gold">Med</span></td><td class="r num">—</td></tr>
-          </tbody></table></div>
-        <div class="card"><div class="ch"><h3>Central Bank Rates · Carry</h3><span class="muted sans">policy &amp; bias</span></div>
-          <table><thead><tr><th>Bank</th><th class="r">Rate</th><th class="r">Next Mtg</th><th class="r">Bias</th></tr></thead><tbody>
-            <tr><td><span class="sym">Fed</span> USD</td><td class="r num">5.50%</td><td class="r">Jun 12</td><td class="r"><span class="pill b">Hold → cut watch</span></td></tr>
-            <tr><td><span class="sym">ECB</span> EUR</td><td class="r num">3.75%</td><td class="r">Jul 18</td><td class="r"><span class="pill r">Cutting</span></td></tr>
-            <tr><td><span class="sym">BoE</span> GBP</td><td class="r num">5.25%</td><td class="r">Jun 20</td><td class="r"><span class="pill b">Hold</span></td></tr>
-            <tr><td><span class="sym">BoJ</span> JPY</td><td class="r num">0.10%</td><td class="r">Jul 31</td><td class="r"><span class="pill g">Hiking bias</span></td></tr>
-            <tr><td><span class="sym">RBA</span> AUD</td><td class="r num">4.35%</td><td class="r">Aug 6</td><td class="r"><span class="pill b">Hold</span></td></tr>
-          </tbody></table></div>
-      </div>
-      <p class="muted sans" style="margin-top:14px;font-size:11px">Feeds: FX rates (broker / market-data API) + economic-calendar API; commentary generated by the AI agent. Research only — read-only, no orders placed from this view.</p>
-    </section>
+    <!-- ===== FX MARKET RESEARCH (live React component portals in here) ===== -->
+    <section class="view" id="fxresearch"></section>
 
     <!-- ===== INVESTMENT THESIS ===== -->
     <section class="view" id="thesis">

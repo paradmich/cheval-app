@@ -7,3 +7,7 @@
 .env*.local
 .vercel
 next-env.d.ts
+
+# local tooling / build artifacts
+.claude/
+tsconfig.tsbuildinfo

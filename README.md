@@ -6,6 +6,10 @@ A private, AI-powered **family-office operating system** for Cheval Holdings —
 - **Next.js (App Router) + React + TypeScript** — deploy on **Vercel**
 - Current UI is the interactive mockup (`app/mockup.ts` markup + `app/globals.css`), injected client-side. Sections are being replaced with real React components + data over time.
 
+## Live sections
+- **FX Market Research** (`app/components/FxResearch.tsx` + `app/api/fx-research/route.ts`) — the first real agent. Live G10 spot rates, 1D/1W moves, and a DXY proxy come from the free, no-key ECB reference feed ([Frankfurter](https://frankfurter.dev)); central-bank policy, the economic calendar, and 10Y/VIX are an agent-maintained snapshot in `app/lib/fxData.ts`. Claude (`claude-opus-4-8`) turns the combined picture into market commentary + a per-pair signal via `/api/fx-research`, cached 15 min. Without `ANTHROPIC_API_KEY` the live rates still load and signals fall back to a rule-based read. The component mounts into the empty `#fxresearch` section with its own React root (see `app/page.tsx`).
+- Set `ANTHROPIC_API_KEY` (see `.env.example`) locally and in the Vercel project to enable AI-generated commentary.
+
 ## Develop
 ```bash
 npm install

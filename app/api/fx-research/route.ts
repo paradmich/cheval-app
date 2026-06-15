@@ -1,0 +1,452 @@
+import Anthropic from '@anthropic-ai/sdk'
+import {
+  CENTRAL_BANKS,
+  ECONOMIC_CALENDAR,
+  REFERENCE_MACRO,
+  WATCHLIST_PAIRS,
+  type CalendarEvent,
+  type Pair,
+  type PillTone,
+} from '../../lib/fxData'
+
+/**
+ * FX Market Research agent.
+ *
+ * Live data:
+ *  - Spot rates + 1D/1W changes + a DXY proxy, from the free no-key
+ *    Frankfurter / ECB feed.
+ *  - Economic calendar, scraped live from ForexFactory via the Apify actor
+ *    `gochujang/economic-calendar-tracker` (needs APIFY_TOKEN). Falls back to
+ *    the curated calendar in app/lib/fxData.ts when the token is absent or the
+ *    scrape fails.
+ *
+ * Curated snapshot: central-bank policy + 10Y/VIX (app/lib/fxData.ts).
+ *
+ * Claude turns the combined picture into market commentary and a per-pair
+ * signal. Degrades gracefully to a rule-based signal when ANTHROPIC_API_KEY is
+ * absent.
+ *
+ * The assembled response is memoised in-process for 15 minutes so a page load
+ * doesn't re-hit Frankfurter, Apify, or Anthropic on every request.
+ */
+export const revalidate = 900
+export const maxDuration = 60
+
+const FRANKFURTER = 'https://api.frankfurter.dev/v1'
+const SYMBOLS = 'EUR,GBP,JPY,AUD,CAD,CHF,SEK'
+
+// Apify economic-calendar actor (free). ~ is the API path separator for "/".
+const APIFY_CALENDAR_ACTOR = 'gochujang~economic-calendar-tracker'
+const CALENDAR_CCYS = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD']
+
+const CACHE_TTL_MS = 15 * 60 * 1000
+let responseCache: { at: number; body: unknown } | null = null
+
+// DXY = trade-weighted USD index. Geometric weights per the ICE definition.
+const DXY_CONST = 50.14348112
+const DXY_WEIGHTS: Record<string, number> = {
+  EUR: 0.576,
+  JPY: 0.136,
+  GBP: 0.119,
+  CAD: 0.091,
+  SEK: 0.042,
+  CHF: 0.036,
+}
+
+type Rates = Record<string, number> // currency-per-USD, base USD
+
+interface PairQuote {
+  pair: Pair
+  rate: number
+  change1d: number | null
+  change1w: number | null
+  trend: '↗' | '↘' | '→'
+}
+
+interface PairSignal {
+  pair: string
+  signal: string
+  signalTone: PillTone
+}
+
+interface Commentary {
+  icon: string
+  title: string
+  body: string
+}
+
+/** USD-base rate → the conventionally quoted pair value. */
+function quoteFromRates(pair: Pair, r: Rates): number {
+  switch (pair) {
+    case 'EUR/USD':
+      return 1 / r.EUR
+    case 'GBP/USD':
+      return 1 / r.GBP
+    case 'USD/JPY':
+      return r.JPY
+    case 'AUD/USD':
+      return 1 / r.AUD
+    case 'USD/CAD':
+      return r.CAD
+    case 'USD/CHF':
+      return r.CHF
+  }
+}
+
+function dxy(r: Rates): number {
+  let v = DXY_CONST
+  for (const [ccy, w] of Object.entries(DXY_WEIGHTS)) v *= Math.pow(r[ccy], w)
+  return v
+}
+
+function pct(now: number, then: number): number {
+  return ((now - then) / then) * 100
+}
+
+/** Fetch the business-day series from `start` to latest, base USD. */
+async function fetchSeries(start: string): Promise<Record<string, Rates>> {
+  const res = await fetch(`${FRANKFURTER}/${start}..?base=USD&symbols=${SYMBOLS}`, {
+    next: { revalidate },
+  })
+  if (!res.ok) throw new Error(`Frankfurter ${res.status}`)
+  const json = (await res.json()) as { rates: Record<string, Rates> }
+  return json.rates
+}
+
+function isoDaysAgo(days: number): string {
+  const d = new Date(Date.now() - days * 86_400_000)
+  return d.toISOString().slice(0, 10)
+}
+
+function buildQuotes(series: Record<string, Rates>): {
+  quotes: PairQuote[]
+  dxyNow: number
+  dxyChange1d: number | null
+} {
+  const dates = Object.keys(series).sort() // ascending
+  const latest = dates[dates.length - 1]
+  const prev = dates[dates.length - 2] // ~1 business day back
+  // ~1 week = 5 business days back, clamped to what's available
+  const weekIdx = Math.max(0, dates.length - 6)
+  const weekAgo = dates[weekIdx]
+
+  const rNow = series[latest]
+  const rPrev = prev ? series[prev] : undefined
+  const rWeek = series[weekAgo]
+
+  const quotes: PairQuote[] = WATCHLIST_PAIRS.map((pair) => {
+    const rate = quoteFromRates(pair, rNow)
+    const c1d = rPrev ? pct(rate, quoteFromRates(pair, rPrev)) : null
+    const c1w = rWeek ? pct(rate, quoteFromRates(pair, rWeek)) : null
+    const basis = c1w ?? c1d ?? 0
+    const trend = basis > 0.05 ? '↗' : basis < -0.05 ? '↘' : '→'
+    return { pair, rate, change1d: c1d, change1w: c1w, trend }
+  })
+
+  const dxyNow = dxy(rNow)
+  const dxyChange1d = rPrev ? pct(dxyNow, dxy(rPrev)) : null
+  return { quotes, dxyNow, dxyChange1d }
+}
+
+function fmtRate(pair: Pair, rate: number): string {
+  return pair === 'USD/JPY' ? rate.toFixed(2) : rate.toFixed(4)
+}
+
+function upcoming(
+  list: CalendarEvent[],
+  today: string,
+): (CalendarEvent & { inDays: number })[] {
+  const t = Date.parse(today)
+  return list
+    .filter((e) => Date.parse(e.date) >= t)
+    .map((e) => ({ ...e, inDays: Math.round((Date.parse(e.date) - t) / 86_400_000) }))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+}
+
+const APIFY_IMPACT: Record<string, CalendarEvent['impact']> = {
+  high: 'High',
+  medium: 'Med',
+  low: 'Low',
+}
+
+interface ApifyCalendarItem {
+  title: string
+  country: string
+  impact: string
+  date_iso: string
+  forecast: string | null
+  previous: string | null
+}
+
+/** "2026-06-17T14:00:00-04:00" → "2:00 PM ET" (the feed is already ET). */
+function etTime(iso: string): string {
+  const hm = iso.slice(11, 16)
+  if (!/^\d\d:\d\d$/.test(hm)) return ''
+  let h = Number(hm.slice(0, 2))
+  const m = hm.slice(3, 5)
+  const ap = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return `${h}:${m} ${ap} ET`
+}
+
+/**
+ * Pull the live economic calendar from Apify (ForexFactory). Returns null on
+ * any failure so the caller can fall back to the curated list.
+ */
+async function fetchApifyCalendar(token: string): Promise<CalendarEvent[] | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_CALENDAR_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 55_000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        includeNextWeek: true,
+        countries: CALENDAR_CCYS,
+        impactLevels: ['high', 'medium'],
+        sortBy: 'date_asc',
+        limit: 40,
+      }),
+    })
+    if (!res.ok) return null
+    const items = (await res.json()) as ApifyCalendarItem[]
+    if (!Array.isArray(items) || items.length === 0) return null
+    return items
+      .filter((it) => typeof it.date_iso === 'string' && it.date_iso.length >= 10)
+      .map((it) => ({
+        date: it.date_iso.slice(0, 10),
+        time: etTime(it.date_iso) || undefined,
+        event: it.title,
+        ccy: it.country,
+        impact: APIFY_IMPACT[String(it.impact).toLowerCase()] ?? 'Med',
+        forecast: it.forecast?.trim() ? it.forecast.trim() : '—',
+      }))
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Rule-based fallback signal when the AI layer is unavailable. */
+function fallbackSignal(q: PairQuote): PairSignal {
+  const basis = q.change1w ?? q.change1d ?? 0
+  // For USD-quoted pairs (USD/XXX) a rise = USD strength; flip the read.
+  const usdBase = q.pair.startsWith('USD/')
+  const bullishUsd = basis > 0.15
+  const bearishUsd = basis < -0.15
+  if (usdBase) {
+    if (bullishUsd) return { pair: q.pair, signal: 'Long USD', signalTone: 'g' }
+    if (bearishUsd) return { pair: q.pair, signal: 'Short USD', signalTone: 'r' }
+  } else {
+    if (basis > 0.15) return { pair: q.pair, signal: 'Bullish', signalTone: 'g' }
+    if (basis < -0.15) return { pair: q.pair, signal: 'Bearish', signalTone: 'r' }
+  }
+  return { pair: q.pair, signal: 'Neutral', signalTone: 'b' }
+}
+
+const SIGNAL_TONES: PillTone[] = ['g', 'r', 'b', 'gold']
+
+const SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    commentary: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          icon: { type: 'string', description: 'A single emoji' },
+          title: { type: 'string', description: 'Short bolded lead, ≤6 words' },
+          body: { type: 'string', description: 'One or two sentences of analysis' },
+        },
+        required: ['icon', 'title', 'body'],
+      },
+    },
+    signals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          pair: { type: 'string', enum: WATCHLIST_PAIRS as unknown as string[] },
+          signal: {
+            type: 'string',
+            description: 'e.g. Bullish, Bearish, Neutral, Long USD, Short USD',
+          },
+          signalTone: { type: 'string', enum: SIGNAL_TONES },
+        },
+        required: ['pair', 'signal', 'signalTone'],
+      },
+    },
+  },
+  required: ['commentary', 'signals'],
+} as const
+
+async function generateAI(
+  quotes: PairQuote[],
+  dxyNow: number,
+  banks: typeof CENTRAL_BANKS,
+  events: ReturnType<typeof upcoming>,
+): Promise<{ commentary: Commentary[]; signals: PairSignal[] } | null> {
+  if (!process.env.ANTHROPIC_API_KEY) return null
+
+  const client = new Anthropic()
+  const data = {
+    dxy: dxyNow.toFixed(1),
+    pairs: quotes.map((q) => ({
+      pair: q.pair,
+      rate: fmtRate(q.pair, q.rate),
+      change1d: q.change1d?.toFixed(2) ?? null,
+      change1w: q.change1w?.toFixed(2) ?? null,
+    })),
+    centralBanks: banks.map((b) => ({ ccy: b.ccy, rate: b.rate, bias: b.bias })),
+    upcomingEvents: events
+      .slice(0, 5)
+      .map((e) => ({ event: e.event, ccy: e.ccy, impact: e.impact, inDays: e.inDays })),
+    macro: { us10yPct: REFERENCE_MACRO.us10yPct, vix: REFERENCE_MACRO.vix },
+  }
+
+  const res = await client.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 2048,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+    system:
+      'You are the FX Market Research agent for a private wealth office. ' +
+      'Given live G10 spot rates with 1D/1W changes, central-bank policy, the ' +
+      'economic calendar, and reference macro, produce concise institutional FX ' +
+      'commentary and a directional signal for each pair. Ground every claim in ' +
+      'the data provided — rate differentials, momentum, and upcoming catalysts. ' +
+      'This is research only; never instruct to place a trade. Return exactly 3 ' +
+      'commentary insights and one signal per pair.',
+    messages: [
+      {
+        role: 'user',
+        content: `Today's FX picture (JSON):\n${JSON.stringify(data, null, 2)}`,
+      },
+    ],
+  })
+
+  const text = res.content.find((b) => b.type === 'text')
+  if (!text || text.type !== 'text') return null
+  try {
+    return JSON.parse(text.text) as { commentary: Commentary[]; signals: PairSignal[] }
+  } catch {
+    return null
+  }
+}
+
+export async function GET() {
+  if (responseCache && Date.now() - responseCache.at < CACHE_TTL_MS) {
+    return Response.json(responseCache.body)
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  let quotes: PairQuote[]
+  let dxyNow: number
+  let dxyChange1d: number | null
+  const live = true
+
+  try {
+    const series = await fetchSeries(isoDaysAgo(12))
+    const built = buildQuotes(series)
+    quotes = built.quotes
+    dxyNow = built.dxyNow
+    dxyChange1d = built.dxyChange1d
+  } catch {
+    // Frankfurter unreachable — surface the curated structure with no live rates.
+    return Response.json(
+      {
+        live: false,
+        error: 'rate feed unavailable',
+        generatedAt: new Date().toISOString(),
+      },
+      { status: 200 },
+    )
+  }
+
+  // Economic calendar: live via Apify when a token is set, else curated.
+  const token = process.env.APIFY_TOKEN
+  const apifyCalendar = token ? await fetchApifyCalendar(token) : null
+  const calendarLive = !!apifyCalendar
+  const events = upcoming(apifyCalendar ?? ECONOMIC_CALENDAR, today)
+  const nextHigh = events.find((e) => e.impact === 'High') ?? events[0]
+
+  const ai = await generateAI(quotes, dxyNow, CENTRAL_BANKS, events)
+  const signals: PairSignal[] = ai?.signals?.length
+    ? ai.signals
+    : quotes.map(fallbackSignal)
+  const commentary: Commentary[] = ai?.commentary?.length
+    ? ai.commentary
+    : [
+        {
+          icon: '🧭',
+          title: 'AI commentary offline',
+          body: 'Live rates and signals are rule-based. Set ANTHROPIC_API_KEY to enable agent commentary.',
+        },
+      ]
+
+  const signalByPair = new Map(signals.map((s) => [s.pair, s]))
+
+  const body = {
+    live,
+    aiEnabled: !!ai,
+    calendarLive,
+    generatedAt: new Date().toISOString(),
+    stats: {
+      dxy: dxyNow.toFixed(1),
+      dxyChange1d,
+      us10yPct: REFERENCE_MACRO.us10yPct,
+      us10yChangeBp: REFERENCE_MACRO.us10yChangeBp,
+      vix: REFERENCE_MACRO.vix,
+      vixNote: REFERENCE_MACRO.vixNote,
+      macroAsOf: REFERENCE_MACRO.asOf,
+      nextHighImpact: nextHigh
+        ? { event: nextHigh.event, inDays: nextHigh.inDays }
+        : null,
+    },
+    watchlist: quotes.map((q) => ({
+      pair: q.pair,
+      rate: fmtRate(q.pair, q.rate),
+      change1d: q.change1d,
+      change1w: q.change1w,
+      trend: q.trend,
+      signal: signalByPair.get(q.pair)?.signal ?? 'Neutral',
+      signalTone: signalByPair.get(q.pair)?.signalTone ?? 'b',
+    })),
+    commentary,
+    calendar: events.slice(0, 6).map((e) => ({
+      when: e.inDays === 0 ? `Today${e.time ? ' ' + e.time : ''}` : labelDate(e.date, e.inDays),
+      event: e.event,
+      ccy: e.ccy,
+      impact: e.impact,
+      forecast: e.forecast,
+    })),
+    centralBanks: CENTRAL_BANKS.map((b) => ({
+      name: b.name,
+      ccy: b.ccy,
+      rate: b.rate.toFixed(2),
+      nextMeeting: shortDate(b.nextMeeting),
+      bias: b.bias,
+      biasTone: b.biasTone,
+    })),
+  }
+
+  responseCache = { at: Date.now(), body }
+  return Response.json(body)
+}
+
+function shortDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00Z')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+function labelDate(iso: string, inDays: number): string {
+  if (inDays === 1) return 'Tomorrow'
+  return shortDate(iso)
+}
