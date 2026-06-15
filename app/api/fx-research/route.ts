@@ -27,10 +27,13 @@ import {
  * absent.
  *
  * The assembled response is memoised in-process for 15 minutes so a page load
- * doesn't re-hit Frankfurter, Apify, or Anthropic on every request.
+ * doesn't re-hit Frankfurter, Apify, or Anthropic on every request. The route
+ * is force-dynamic (not statically cached by Next) so it self-heals when an
+ * upstream recovers — the in-process memo is the only response cache.
  */
-export const revalidate = 900
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+const RATE_REVALIDATE = 900
 
 const FRANKFURTER = 'https://api.frankfurter.dev/v1'
 const SYMBOLS = 'EUR,GBP,JPY,AUD,CAD,CHF,SEK'
@@ -118,7 +121,7 @@ function pct(now: number, then: number): number {
 /** Fetch the business-day series from `start` to latest, base USD. */
 async function fetchSeries(start: string): Promise<Record<string, Rates>> {
   const res = await fetch(`${FRANKFURTER}/${start}..?base=USD&symbols=${SYMBOLS}`, {
-    next: { revalidate },
+    next: { revalidate: RATE_REVALIDATE },
   })
   if (!res.ok) throw new Error(`Frankfurter ${res.status}`)
   const json = (await res.json()) as { rates: Record<string, Rates> }
@@ -205,8 +208,11 @@ function etTime(iso: string): string {
  * Pull the live economic calendar from Apify (ForexFactory). Returns null on
  * any failure so the caller can fall back to the curated list.
  */
-async function fetchApifyCalendar(token: string): Promise<CalendarEvent[] | null> {
-  const url = `https://api.apify.com/v2/acts/${APIFY_CALENDAR_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+async function fetchApifyCalendar(
+  token: string,
+  debug?: string[],
+): Promise<CalendarEvent[] | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_CALENDAR_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55&memory=2048`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 55_000)
   try {
@@ -222,9 +228,15 @@ async function fetchApifyCalendar(token: string): Promise<CalendarEvent[] | null
         limit: 40,
       }),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      debug?.push(`calendar HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`)
+      return null
+    }
     const items = (await res.json()) as ApifyCalendarItem[]
-    if (!Array.isArray(items) || items.length === 0) return null
+    if (!Array.isArray(items) || items.length === 0) {
+      debug?.push('calendar empty')
+      return null
+    }
     return items
       .filter((it) => typeof it.date_iso === 'string' && it.date_iso.length >= 10)
       .map((it) => ({
@@ -235,7 +247,8 @@ async function fetchApifyCalendar(token: string): Promise<CalendarEvent[] | null
         impact: APIFY_IMPACT[String(it.impact).toLowerCase()] ?? 'Med',
         forecast: it.forecast?.trim() ? it.forecast.trim() : '—',
       }))
-  } catch {
+  } catch (e) {
+    debug?.push(`calendar err: ${String(e).slice(0, 120)}`)
     return null
   } finally {
     clearTimeout(timer)
@@ -259,8 +272,8 @@ export interface Headline {
  * Pull recent FX / economy headlines from Apify (Investing.com). Returns null
  * on failure so commentary still runs without news grounding.
  */
-async function fetchApifyNews(token: string): Promise<Headline[] | null> {
-  const url = `https://api.apify.com/v2/acts/${APIFY_NEWS_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+async function fetchApifyNews(token: string, debug?: string[]): Promise<Headline[] | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_NEWS_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55&memory=2048`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 55_000)
   try {
@@ -270,14 +283,21 @@ async function fetchApifyNews(token: string): Promise<Headline[] | null> {
       signal: ctrl.signal,
       body: JSON.stringify({ categories: ['forex', 'economy'], maxResults: 14 }),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      debug?.push(`news HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`)
+      return null
+    }
     const items = (await res.json()) as ApifyNewsItem[]
-    if (!Array.isArray(items) || items.length === 0) return null
+    if (!Array.isArray(items) || items.length === 0) {
+      debug?.push('news empty')
+      return null
+    }
     return items
       .filter((it) => it.title?.trim())
       .map((it) => ({ title: it.title.trim(), url: it.link, pubDate: it.pubDate }))
       .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate))
-  } catch {
+  } catch (e) {
+    debug?.push(`news err: ${String(e).slice(0, 120)}`)
     return null
   } finally {
     clearTimeout(timer)
@@ -302,8 +322,9 @@ export interface Sentiment {
  */
 async function fetchMyfxbookSentiment(
   token: string,
+  debug?: string[],
 ): Promise<Map<Pair, Sentiment> | null> {
-  const url = `https://api.apify.com/v2/acts/${APIFY_SENTIMENT_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+  const url = `https://api.apify.com/v2/acts/${APIFY_SENTIMENT_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55&memory=2048`
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 55_000)
   const symbolToPair = new Map(
@@ -316,9 +337,15 @@ async function fetchMyfxbookSentiment(
       signal: ctrl.signal,
       body: JSON.stringify({ symbols: Object.values(PAIR_TO_SYMBOL) }),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      debug?.push(`sentiment HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`)
+      return null
+    }
     const items = (await res.json()) as ApifySentimentItem[]
-    if (!Array.isArray(items) || items.length === 0) return null
+    if (!Array.isArray(items) || items.length === 0) {
+      debug?.push('sentiment empty')
+      return null
+    }
     const map = new Map<Pair, Sentiment>()
     for (const it of items) {
       const pair = symbolToPair.get(it.symbol)
@@ -327,7 +354,8 @@ async function fetchMyfxbookSentiment(
       }
     }
     return map.size ? map : null
-  } catch {
+  } catch (e) {
+    debug?.push(`sentiment err: ${String(e).slice(0, 120)}`)
     return null
   } finally {
     clearTimeout(timer)
@@ -491,16 +519,19 @@ export async function GET() {
   // Calendar (ForexFactory), news, and Myfxbook retail sentiment: live via Apify
   // when a token is set, else curated / omitted.
   const token = process.env.APIFY_TOKEN
+  const apifyDebug: string[] = []
+  if (!token) apifyDebug.push('no APIFY_TOKEN in env')
   const [apifyCalendar, headlines, sentiment] = token
     ? await Promise.all([
-        fetchApifyCalendar(token),
-        fetchApifyNews(token),
-        fetchMyfxbookSentiment(token),
+        fetchApifyCalendar(token, apifyDebug),
+        fetchApifyNews(token, apifyDebug),
+        fetchMyfxbookSentiment(token, apifyDebug),
       ])
     : [null, null, null]
   const calendarLive = !!apifyCalendar
   const newsLive = !!headlines
   const sentimentLive = !!sentiment
+  if (apifyDebug.length) console.error('[fx-research] apify:', apifyDebug.join(' | '))
   const events = upcoming(apifyCalendar ?? ECONOMIC_CALENDAR, today)
   const nextHigh = events.find((e) => e.impact === 'High') ?? events[0]
 
@@ -572,7 +603,11 @@ export async function GET() {
     })),
   }
 
-  responseCache = { at: Date.now(), body }
+  // Cache unless a token was set but every Apify source failed — that signals a
+  // transient/systemic issue we'd rather retry on the next request than pin for
+  // 15 minutes.
+  const totalApifyFailure = !!token && !calendarLive && !newsLive && !sentimentLive
+  if (!totalApifyFailure) responseCache = { at: Date.now(), body }
   return Response.json(body)
 }
 
