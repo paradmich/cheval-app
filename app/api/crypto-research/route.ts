@@ -72,10 +72,13 @@ async function fetchCoins(token: string, debug?: string[]): Promise<Coin[] | nul
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       signal: ctrl.signal,
+      // top_coins is one batched /coins/markets call (fast); specific_coins
+      // fetches each coin's detail sequentially and times out on serverless.
+      // The watchlist is selected from the result by id below.
       body: JSON.stringify({
-        mode: 'specific_coins',
+        mode: 'top_coins',
         vs_currency: 'usd',
-        coin_ids: CRYPTO_COIN_IDS.join(','),
+        top_n: 100,
       }),
     })
     if (!res.ok) {
