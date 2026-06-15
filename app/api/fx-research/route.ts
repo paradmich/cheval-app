@@ -36,9 +36,20 @@ const FRANKFURTER = 'https://api.frankfurter.dev/v1'
 const SYMBOLS = 'EUR,GBP,JPY,AUD,CAD,CHF,SEK'
 
 // Apify actors (~ is the API path separator for "/").
-const APIFY_CALENDAR_ACTOR = 'gochujang~economic-calendar-tracker' // free
+const APIFY_CALENDAR_ACTOR = 'gochujang~economic-calendar-tracker' // free, ForexFactory
 const APIFY_NEWS_ACTOR = 'cloud9_ai~investing-news-scraper' // pay-per-item
+const APIFY_SENTIMENT_ACTOR = 'xtracto~myfxbook-community-outlook' // Myfxbook retail positioning
 const CALENDAR_CCYS = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD']
+
+// Watchlist pair → Myfxbook Community Outlook symbol.
+const PAIR_TO_SYMBOL: Record<Pair, string> = {
+  'EUR/USD': 'EURUSD',
+  'GBP/USD': 'GBPUSD',
+  'USD/JPY': 'USDJPY',
+  'AUD/USD': 'AUDUSD',
+  'USD/CAD': 'USDCAD',
+  'USD/CHF': 'USDCHF',
+}
 
 const CACHE_TTL_MS = 15 * 60 * 1000
 let responseCache: { at: number; body: unknown } | null = null
@@ -273,6 +284,56 @@ async function fetchApifyNews(token: string): Promise<Headline[] | null> {
   }
 }
 
+interface ApifySentimentItem {
+  symbol: string
+  longPercentage: number
+  shortPercentage: number
+}
+
+export interface Sentiment {
+  long: number
+  short: number
+}
+
+/**
+ * Pull Myfxbook Community Outlook retail positioning (% long vs short) for the
+ * watchlist pairs. A crowded side (>=70%) is a classic contrarian signal.
+ * Returns null on failure so the rest of the agent still runs.
+ */
+async function fetchMyfxbookSentiment(
+  token: string,
+): Promise<Map<Pair, Sentiment> | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_SENTIMENT_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 55_000)
+  const symbolToPair = new Map(
+    (Object.entries(PAIR_TO_SYMBOL) as [Pair, string][]).map(([p, s]) => [s, p]),
+  )
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({ symbols: Object.values(PAIR_TO_SYMBOL) }),
+    })
+    if (!res.ok) return null
+    const items = (await res.json()) as ApifySentimentItem[]
+    if (!Array.isArray(items) || items.length === 0) return null
+    const map = new Map<Pair, Sentiment>()
+    for (const it of items) {
+      const pair = symbolToPair.get(it.symbol)
+      if (pair && typeof it.longPercentage === 'number') {
+        map.set(pair, { long: it.longPercentage, short: it.shortPercentage })
+      }
+    }
+    return map.size ? map : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Rule-based fallback signal when the AI layer is unavailable. */
 function fallbackSignal(q: PairQuote): PairSignal {
   const basis = q.change1w ?? q.change1d ?? 0
@@ -335,18 +396,24 @@ async function generateAI(
   banks: typeof CENTRAL_BANKS,
   events: ReturnType<typeof upcoming>,
   headlines: Headline[] | null,
+  sentiment: Map<Pair, Sentiment> | null,
 ): Promise<{ commentary: Commentary[]; signals: PairSignal[] } | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
 
   const client = new Anthropic()
   const data = {
     dxy: dxyNow.toFixed(1),
-    pairs: quotes.map((q) => ({
-      pair: q.pair,
-      rate: fmtRate(q.pair, q.rate),
-      change1d: q.change1d?.toFixed(2) ?? null,
-      change1w: q.change1w?.toFixed(2) ?? null,
-    })),
+    pairs: quotes.map((q) => {
+      const s = sentiment?.get(q.pair)
+      return {
+        pair: q.pair,
+        rate: fmtRate(q.pair, q.rate),
+        change1d: q.change1d?.toFixed(2) ?? null,
+        change1w: q.change1w?.toFixed(2) ?? null,
+        retailLongPct: s?.long ?? null,
+        retailShortPct: s?.short ?? null,
+      }
+    }),
     centralBanks: banks.map((b) => ({ ccy: b.ccy, rate: b.rate, bias: b.bias })),
     upcomingEvents: events
       .slice(0, 5)
@@ -369,8 +436,11 @@ async function generateAI(
       'upcoming catalysts, and the headlines. When a headline explains a move or ' +
       'a catalyst (e.g. a geopolitical event, an intervention call, a bank ' +
       'recommendation), reference that driver concretely rather than describing ' +
-      'price action generically. This is research only; never instruct to place a ' +
-      'trade. Return exactly 3 commentary insights and one signal per pair.',
+      'price action generically. retailLongPct/retailShortPct are Myfxbook retail ' +
+      'positioning — treat a crowded side (>=70%) as a CONTRARIAN signal (heavy ' +
+      'retail longs lean bearish for the pair, and vice versa) and call it out ' +
+      'when notable. This is research only; never instruct to place a trade. ' +
+      'Return exactly 3 commentary insights and one signal per pair.',
     messages: [
       {
         role: 'user',
@@ -418,17 +488,23 @@ export async function GET() {
     )
   }
 
-  // Economic calendar + news: live via Apify when a token is set, else curated.
+  // Calendar (ForexFactory), news, and Myfxbook retail sentiment: live via Apify
+  // when a token is set, else curated / omitted.
   const token = process.env.APIFY_TOKEN
-  const [apifyCalendar, headlines] = token
-    ? await Promise.all([fetchApifyCalendar(token), fetchApifyNews(token)])
-    : [null, null]
+  const [apifyCalendar, headlines, sentiment] = token
+    ? await Promise.all([
+        fetchApifyCalendar(token),
+        fetchApifyNews(token),
+        fetchMyfxbookSentiment(token),
+      ])
+    : [null, null, null]
   const calendarLive = !!apifyCalendar
   const newsLive = !!headlines
+  const sentimentLive = !!sentiment
   const events = upcoming(apifyCalendar ?? ECONOMIC_CALENDAR, today)
   const nextHigh = events.find((e) => e.impact === 'High') ?? events[0]
 
-  const ai = await generateAI(quotes, dxyNow, CENTRAL_BANKS, events, headlines)
+  const ai = await generateAI(quotes, dxyNow, CENTRAL_BANKS, events, headlines, sentiment)
   const signals: PairSignal[] = ai?.signals?.length
     ? ai.signals
     : quotes.map(fallbackSignal)
@@ -449,6 +525,7 @@ export async function GET() {
     aiEnabled: !!ai,
     calendarLive,
     newsLive,
+    sentimentLive,
     headlines: (headlines ?? []).slice(0, 4),
     generatedAt: new Date().toISOString(),
     stats: {
@@ -463,15 +540,20 @@ export async function GET() {
         ? { event: nextHigh.event, inDays: nextHigh.inDays }
         : null,
     },
-    watchlist: quotes.map((q) => ({
-      pair: q.pair,
-      rate: fmtRate(q.pair, q.rate),
-      change1d: q.change1d,
-      change1w: q.change1w,
-      trend: q.trend,
-      signal: signalByPair.get(q.pair)?.signal ?? 'Neutral',
-      signalTone: signalByPair.get(q.pair)?.signalTone ?? 'b',
-    })),
+    watchlist: quotes.map((q) => {
+      const s = sentiment?.get(q.pair) ?? null
+      return {
+        pair: q.pair,
+        rate: fmtRate(q.pair, q.rate),
+        change1d: q.change1d,
+        change1w: q.change1w,
+        trend: q.trend,
+        signal: signalByPair.get(q.pair)?.signal ?? 'Neutral',
+        signalTone: signalByPair.get(q.pair)?.signalTone ?? 'b',
+        retailLong: s?.long ?? null,
+        retailShort: s?.short ?? null,
+      }
+    }),
     commentary,
     calendar: events.slice(0, 6).map((e) => ({
       when: e.inDays === 0 ? `Today${e.time ? ' ' + e.time : ''}` : labelDate(e.date, e.inDays),
