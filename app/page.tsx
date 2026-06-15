@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { BODY, NAVSCRIPT } from './mockup'
 import FxResearch from './components/FxResearch'
 import CryptoResearch from './components/CryptoResearch'
+import StockResearch from './components/StockResearch'
 
 /**
  * Renders the Cheval Holdings mockup. The static markup is injected once via
@@ -20,6 +21,7 @@ import CryptoResearch from './components/CryptoResearch'
 const LIVE_SECTIONS: { id: string; node: ReactNode }[] = [
   { id: 'fxresearch', node: <FxResearch /> },
   { id: 'cryptoresearch', node: <CryptoResearch /> },
+  { id: 'stockresearch', node: <StockResearch /> },
 ]
 
 export default function Page() {

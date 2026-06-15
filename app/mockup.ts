@@ -399,47 +399,7 @@ export const BODY = `<div class="app">
     <section class="view" id="cryptoresearch"></section>
 
     <!-- ===== STOCK RESEARCH ===== -->
-    <section class="view" id="stockresearch">
-      <div class="grid four stats">
-        <div class="card stat"><div class="lbl">S&amp;P 500</div><div class="v">5,561</div><div class="d up">▲ +0.6%</div></div>
-        <div class="card stat"><div class="lbl">Nasdaq 100</div><div class="v">19,860</div><div class="d up">▲ +0.9%</div></div>
-        <div class="card stat"><div class="lbl">Risk (VIX)</div><div class="v">14.1</div><div class="d neu">Calm · risk-on</div></div>
-        <div class="card stat"><div class="lbl">US 10-Year</div><div class="v">4.28%</div><div class="d up">▲ +4 bp</div></div>
-      </div>
-      <div class="grid two" style="margin-bottom:16px">
-        <div class="card"><div class="ch"><h3>Watchlist · Holdings &amp; Targets</h3><span class="muted sans">live · 15-min delayed</span></div>
-          <table><thead><tr><th>Ticker</th><th class="r">Price</th><th class="r">1D</th><th class="r">1W</th><th class="r">P/E</th><th class="r">Rating</th><th class="r">AI</th></tr></thead><tbody>
-            <tr><td><span class="sym">NVDA</span></td><td class="r num">$141.20</td><td class="r num up">+2.1%</td><td class="r num up">+5.4%</td><td class="r num">38x</td><td class="r num">Strong Buy</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">MSFT</span></td><td class="r num">$438.90</td><td class="r num up">+0.8%</td><td class="r num up">+2.1%</td><td class="r num">34x</td><td class="r num">Buy</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">AAPL</span></td><td class="r num">$205.70</td><td class="r num up">+1.2%</td><td class="r num up">+3.0%</td><td class="r num">31x</td><td class="r num">Buy</td><td class="r"><span class="pill b">Hold</span></td></tr>
-            <tr><td><span class="sym">BRK.B</span></td><td class="r num">$442.10</td><td class="r num up">+0.3%</td><td class="r num up">+1.1%</td><td class="r num">22x</td><td class="r num">Hold</td><td class="r"><span class="pill b">Hold</span></td></tr>
-            <tr><td><span class="sym">VTI</span> <span class="muted">core</span></td><td class="r num">$285.40</td><td class="r num up">+0.6%</td><td class="r num up">+1.8%</td><td class="r num">—</td><td class="r num">—</td><td class="r"><span class="pill m">Core</span></td></tr>
-            <tr><td><span class="sym">AMZN</span> <span class="muted">watch</span></td><td class="r num">$189.30</td><td class="r num up">+1.0%</td><td class="r num up">+2.4%</td><td class="r num">42x</td><td class="r num">Buy</td><td class="r"><span class="pill gold">Watch</span></td></tr>
-          </tbody></table></div>
-        <div class="card ai"><div class="ch"><h3>✦ AI Market Commentary</h3><span class="pill g">Updated 6m ago</span></div>
-          <div class="insight"><span>📈</span><p><b>Breadth improving.</b> Mega-cap tech leading; rate-cut pricing supportive while VIX &lt; 15 keeps the tone risk-on.</p></div>
-          <div class="insight"><span>✂️</span><p><b>NVDA</b> momentum strong but <b>extended</b> (38x) — consider trimming into strength; thesis intact long-term.</p></div>
-          <div class="insight"><span>🗓️</span><p><b>Key risk:</b> CPI (Jun 12) + FOMC. A hot print pressures multiples — keep dry powder in the cash sleeve.</p></div></div>
-      </div>
-      <div class="grid two">
-        <div class="card"><div class="ch"><h3>Earnings Calendar</h3><span class="link">Full calendar →</span></div>
-          <table><thead><tr><th>When</th><th>Company</th><th class="r">Ticker</th><th class="r">Est. EPS</th><th class="r">Time</th></tr></thead><tbody>
-            <tr><td>Jun 11</td><td>Oracle</td><td class="r">ORCL</td><td class="r num">$1.65</td><td class="r">After close</td></tr>
-            <tr><td>Jun 12</td><td>Broadcom</td><td class="r">AVGO</td><td class="r num">$10.84</td><td class="r">After close</td></tr>
-            <tr><td>Jun 13</td><td>Adobe</td><td class="r">ADBE</td><td class="r num">$4.39</td><td class="r">After close</td></tr>
-            <tr><td>Jun 20</td><td>FedEx</td><td class="r">FDX</td><td class="r num">$5.35</td><td class="r">After close</td></tr>
-            <tr><td>Jun 25</td><td>Micron</td><td class="r">MU</td><td class="r num">$0.51</td><td class="r">After close</td></tr>
-          </tbody></table></div>
-        <div class="card"><div class="ch"><h3>Sector Performance · 1D</h3><span class="muted sans">S&amp;P sectors</span></div>
-          <div class="kv"><span class="k">Technology</span><span class="up">+1.4%</span></div><div class="bar"><i style="width:80%;background:var(--green)"></i></div>
-          <div class="kv" style="margin-top:8px"><span class="k">Communication Svcs</span><span class="up">+0.9%</span></div><div class="bar"><i style="width:60%;background:var(--green)"></i></div>
-          <div class="kv" style="margin-top:8px"><span class="k">Consumer Disc.</span><span class="up">+0.5%</span></div><div class="bar"><i style="width:42%;background:var(--green)"></i></div>
-          <div class="kv" style="margin-top:8px"><span class="k">Financials</span><span class="up">+0.3%</span></div><div class="bar"><i style="width:30%;background:var(--blue)"></i></div>
-          <div class="kv" style="margin-top:8px"><span class="k">Utilities</span><span class="down">−0.2%</span></div><div class="bar"><i style="width:18%;background:var(--red)"></i></div>
-          <div class="kv" style="margin-top:8px"><span class="k">Energy</span><span class="down">−0.6%</span></div><div class="bar"><i style="width:34%;background:var(--red)"></i></div></div>
-      </div>
-      <p class="muted sans" style="margin-top:14px;font-size:11px">Feeds: market-data API (quotes, fundamentals, ratings) + earnings-calendar API; commentary generated by the AI agent. Research only — read-only, no orders placed from this view.</p>
-    </section>
+    <section class="view" id="stockresearch"></section>
 
     <!-- ===== REAL ESTATE ===== -->
     <section class="view" id="realestate">
