@@ -1,29 +1,32 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { BODY, NAVSCRIPT } from './mockup'
 import FxResearch from './components/FxResearch'
+import CryptoResearch from './components/CryptoResearch'
 
 /**
  * Renders the Cheval Holdings mockup. The static markup is injected once via
  * dangerouslySetInnerHTML and the original nav-switching script runs after
  * mount. Real sections replace the static markup incrementally.
  *
- * The FX Market Research view is a live React component (Frankfurter rates +
- * Claude commentary). It is mounted into the empty #fxresearch section with its
- * OWN isolated React root via createRoot — not a portal. Portaling into a node
- * inside a dangerouslySetInnerHTML subtree is unstable (React treats that DOM
- * as opaque and keeps resetting it, which strands the portal and loops). A
- * separate root owns a node the outer React never reconciles, so it's stable.
+ * Each live section (FX, Crypto, …) is mounted into its empty mockup section
+ * with its OWN isolated React root via createRoot — not a portal. Portaling
+ * into a node inside a dangerouslySetInnerHTML subtree is unstable (React
+ * treats that DOM as opaque and keeps resetting it, which strands the portal
+ * and loops). A separate root owns a node the outer React never reconciles.
  */
+const LIVE_SECTIONS: { id: string; node: ReactNode }[] = [
+  { id: 'fxresearch', node: <FxResearch /> },
+  { id: 'cryptoresearch', node: <CryptoResearch /> },
+]
+
 export default function Page() {
   const hostRef = useRef<HTMLDivElement>(null)
   const navInit = useRef(false)
 
   useEffect(() => {
-    const section = hostRef.current?.querySelector<HTMLElement>('#fxresearch')
-
     if (!navInit.current) {
       navInit.current = true
       try {
@@ -34,18 +37,22 @@ export default function Page() {
       }
     }
 
-    let root: Root | undefined
-    let mount: HTMLDivElement | undefined
-    if (section) {
-      mount = document.createElement('div')
+    const mounted: { root: Root; mount: HTMLDivElement }[] = []
+    for (const { id, node } of LIVE_SECTIONS) {
+      const section = hostRef.current?.querySelector<HTMLElement>(`#${id}`)
+      if (!section) continue
+      const mount = document.createElement('div')
       section.appendChild(mount)
-      root = createRoot(mount)
-      root.render(<FxResearch />)
+      const root = createRoot(mount)
+      root.render(node)
+      mounted.push({ root, mount })
     }
 
     return () => {
-      root?.unmount()
-      mount?.remove()
+      for (const { root, mount } of mounted) {
+        root.unmount()
+        mount.remove()
+      }
     }
   }, [])
 

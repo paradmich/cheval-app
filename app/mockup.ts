@@ -396,45 +396,7 @@ export const BODY = `<div class="app">
     </section>
 
     <!-- ===== CRYPTO RESEARCH ===== -->
-    <section class="view" id="cryptoresearch">
-      <div class="grid four stats">
-        <div class="card stat"><div class="lbl">Total Market Cap</div><div class="v">$2.4T</div><div class="d up">▲ +3.2%</div></div>
-        <div class="card stat"><div class="lbl">BTC Dominance</div><div class="v">54.0%</div><div class="d neu">alt-rotation watch</div></div>
-        <div class="card stat"><div class="lbl">Fear &amp; Greed</div><div class="v">72</div><div class="d up">▲ Greed</div></div>
-        <div class="card stat"><div class="lbl">BTC ETF Flows (7d)</div><div class="v">+$1.2B</div><div class="d up">▲ net inflows</div></div>
-      </div>
-      <div class="grid two" style="margin-bottom:16px">
-        <div class="card"><div class="ch"><h3>Watchlist · Coins</h3><span class="muted sans">live · market feed</span></div>
-          <table><thead><tr><th>Asset</th><th class="r">Price</th><th class="r">24h</th><th class="r">7d</th><th class="r">Mkt Cap</th><th class="r">AI Signal</th></tr></thead><tbody>
-            <tr><td><span class="sym">BTC</span> <span class="muted">held</span></td><td class="r num">$74,100</td><td class="r num up">+5.8%</td><td class="r num up">+12.4%</td><td class="r num">$1.46T</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">ETH</span> <span class="muted">held</span></td><td class="r num">$3,420</td><td class="r num up">+7.2%</td><td class="r num up">+15.1%</td><td class="r num">$411B</td><td class="r"><span class="pill g">Bullish</span></td></tr>
-            <tr><td><span class="sym">SOL</span> <span class="muted">held</span></td><td class="r num">$168</td><td class="r num up">+9.1%</td><td class="r num up">+22.3%</td><td class="r num">$78B</td><td class="r"><span class="pill gold">Take profit</span></td></tr>
-            <tr><td><span class="sym">LINK</span> <span class="muted">watch</span></td><td class="r num">$18.40</td><td class="r num up">+4.2%</td><td class="r num up">+9.0%</td><td class="r num">$11B</td><td class="r"><span class="pill gold">Watch</span></td></tr>
-            <tr><td><span class="sym">USDC</span> <span class="muted">stable</span></td><td class="r num">$1.00</td><td class="r num neu">0.0%</td><td class="r num">—</td><td class="r num">$34B</td><td class="r"><span class="pill m">Stable</span></td></tr>
-          </tbody></table></div>
-        <div class="card ai"><div class="ch"><h3>✦ AI Market Commentary</h3><span class="pill g">Updated 6m ago</span></div>
-          <div class="insight"><span>📈</span><p><b>Risk-on.</b> Strong spot-ETF inflows; BTC leading. Funding mildly positive — not yet euphoric.</p></div>
-          <div class="insight"><span>🔄</span><p><b>Dominance elevated (54%) but rolling</b> — early signal for alt rotation. SOL extended (+22% 7d) — consider trimming into strength.</p></div>
-          <div class="insight"><span>⚓</span><p><b>Discipline:</b> keep the cold-storage core intact; take profits at the margin. <b>FOMC is the macro swing factor.</b></p></div></div>
-      </div>
-      <div class="grid two">
-        <div class="card"><div class="ch"><h3>On-Chain &amp; Market Metrics</h3><span class="muted sans">aggregated</span></div>
-          <div class="kv"><span class="k">BTC dominance</span><span>54.0%</span></div>
-          <div class="kv"><span class="k">ETH / BTC ratio</span><span>0.046 <span class="muted">· coiling</span></span></div>
-          <div class="kv"><span class="k">Perp funding (avg)</span><span class="up">+0.012% <span class="muted">· mildly long</span></span></div>
-          <div class="kv"><span class="k">Stablecoin supply</span><span class="up">$162B ↑ <span class="muted">· liquidity rising</span></span></div>
-          <div class="kv"><span class="k">Exchange BTC reserves</span><span class="up">↓ <span class="muted">· coins leaving exchanges</span></span></div>
-          <div class="kv"><span class="k">30-day realized vol</span><span>48% <span class="muted">· moderate</span></span></div></div>
-        <div class="card"><div class="ch"><h3>Catalysts &amp; Calendar</h3><span class="link">Full calendar →</span></div>
-          <table><thead><tr><th>When</th><th>Event</th><th class="r">Asset</th><th class="r">Impact</th></tr></thead><tbody>
-            <tr><td>Jun 12</td><td>FOMC (macro)</td><td class="r">All</td><td class="r"><span class="pill r">High</span></td></tr>
-            <tr><td>Jun 17</td><td>Token unlock</td><td class="r">ARB</td><td class="r"><span class="pill gold">Med</span></td></tr>
-            <tr><td>July</td><td>Spot ETH ETF inflows ramp</td><td class="r">ETH</td><td class="r"><span class="pill r">High</span></td></tr>
-            <tr><td>Aug</td><td>Network upgrade</td><td class="r">SOL</td><td class="r"><span class="pill gold">Med</span></td></tr>
-          </tbody></table></div>
-      </div>
-      <p class="muted sans" style="margin-top:14px;font-size:11px">Feeds: market-data + on-chain APIs (price, dominance, flows, funding) and an ETF-flow feed; commentary generated by the AI agent. Research only — read-only, no trades placed from this view.</p>
-    </section>
+    <section class="view" id="cryptoresearch"></section>
 
     <!-- ===== STOCK RESEARCH ===== -->
     <section class="view" id="stockresearch">
