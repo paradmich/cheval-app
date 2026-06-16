@@ -18,6 +18,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const APIFY_CRYPTO_ACTOR = 'gentle_cloud~cryptocurrency-market-data-scraper'
+const APIFY_RESERVE_ACTOR = 'gochujang~cex-reserve-tracker' // exchange reserves (free)
+const STABLES = new Set(['USDT', 'USDC', 'DAI'])
 const CACHE_TTL_MS = 15 * 60 * 1000
 let responseCache: { at: number; body: unknown } | null = null
 
@@ -118,6 +120,68 @@ async function fetchCoins(token: string, debug?: string[]): Promise<Coin[] | nul
   }
 }
 
+interface ReserveItem {
+  exchange: string
+  asset: string
+  balance_usd: number
+}
+
+interface Reserves {
+  stablecoinUsd: number
+  ethUsd: number
+  totalUsd: number
+  byExchange: { exchange: string; usd: number }[]
+}
+
+/** Aggregate live CEX on-chain reserves (ETH + stablecoins) from Apify. */
+async function fetchReserves(token: string, debug?: string[]): Promise<Reserves | null> {
+  const url = `https://api.apify.com/v2/acts/${APIFY_RESERVE_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55&memory=2048`
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 55_000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        exchanges: ['Binance', 'Coinbase', 'Kraken', 'OKX', 'Bybit', 'Bitfinex'],
+        assets: ['ETH', 'USDT', 'USDC', 'DAI'],
+        minBalanceUsd: 5_000_000,
+        sortBy: 'balance_usd_desc',
+        limit: 120,
+      }),
+    })
+    if (!res.ok) {
+      debug?.push(`reserves HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`)
+      return null
+    }
+    const items = (await res.json()) as ReserveItem[]
+    if (!Array.isArray(items) || items.length === 0) {
+      debug?.push('reserves empty')
+      return null
+    }
+    let stablecoinUsd = 0
+    let ethUsd = 0
+    const byEx = new Map<string, number>()
+    for (const it of items) {
+      const usd = Number(it.balance_usd) || 0
+      if (it.asset === 'ETH') ethUsd += usd
+      else if (STABLES.has(it.asset)) stablecoinUsd += usd
+      byEx.set(it.exchange, (byEx.get(it.exchange) ?? 0) + usd)
+    }
+    const byExchange = [...byEx.entries()]
+      .map(([exchange, usd]) => ({ exchange, usd }))
+      .sort((a, b) => b.usd - a.usd)
+      .slice(0, 5)
+    return { stablecoinUsd, ethUsd, totalUsd: stablecoinUsd + ethUsd, byExchange }
+  } catch (e) {
+    debug?.push(`reserves err: ${String(e).slice(0, 120)}`)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Rule-based fallback signal from 7d momentum when the AI layer is off. */
 function fallbackSignal(c: Coin): CoinSignal {
   if (c.tag === 'stable') return { symbol: c.symbol, signal: 'Stable', signalTone: 'm' }
@@ -167,21 +231,34 @@ const SCHEMA = {
   required: ['commentary', 'signals'],
 } as const
 
+function bn(usd: number): string {
+  return usd >= 1e9 ? `${(usd / 1e9).toFixed(1)}B` : `${(usd / 1e6).toFixed(0)}M`
+}
+
 async function generateAI(
   coins: Coin[],
+  reserves: Reserves | null,
 ): Promise<{ commentary: Commentary[]; signals: CoinSignal[] } | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   const client = new Anthropic()
-  const data = coins.map((c) => ({
-    symbol: c.symbol,
-    name: c.name,
-    tag: c.tag,
-    price: c.price,
-    change24hPct: c.change24h?.toFixed(2) ?? null,
-    change7dPct: c.change7d?.toFixed(2) ?? null,
-    marketCapUsd: c.marketCap,
-    fromAthPct: c.athChangePct?.toFixed(1) ?? null,
-  }))
+  const data = {
+    coins: coins.map((c) => ({
+      symbol: c.symbol,
+      name: c.name,
+      tag: c.tag,
+      price: c.price,
+      change24hPct: c.change24h?.toFixed(2) ?? null,
+      change7dPct: c.change7d?.toFixed(2) ?? null,
+      marketCapUsd: c.marketCap,
+      fromAthPct: c.athChangePct?.toFixed(1) ?? null,
+    })),
+    exchangeReserves: reserves
+      ? {
+          stablecoinDryPowderUsd: `$${bn(reserves.stablecoinUsd)}`,
+          ethOnExchangesUsd: `$${bn(reserves.ethUsd)}`,
+        }
+      : null,
+  }
 
   const res = await client.messages.create({
     model: 'claude-opus-4-8',
@@ -196,8 +273,12 @@ async function generateAI(
       'Ground every claim in the data — momentum, relative strength, market-cap ' +
       'tiers, and how extended each coin is vs its ATH. For coins tagged "held", ' +
       'a strong 7d run (e.g. >15%) can warrant a "Take profit" signal; "stable" ' +
-      'coins are "Stable". This is research only; never instruct to place a ' +
-      'trade. Return exactly 3 commentary insights and one signal per coin.',
+      'coins are "Stable". exchangeReserves is live on-chain smart-money context: ' +
+      'a large stablecoin "dry powder" balance parked on exchanges = sidelined ' +
+      'buying power (supportive), while a heavy/rising ETH balance on exchanges ' +
+      'can signal distribution; reference it in at least one insight when notable. ' +
+      'This is research only; never instruct to place a trade. Return exactly 3 ' +
+      'commentary insights and one signal per coin.',
     messages: [
       { role: 'user', content: `Today's crypto watchlist (JSON):\n${JSON.stringify(data, null, 2)}` },
     ],
@@ -233,7 +314,9 @@ export async function GET() {
   const token = process.env.APIFY_TOKEN
   const debug: string[] = []
   if (!token) debug.push('no APIFY_TOKEN in env')
-  const coins = token ? await fetchCoins(token, debug) : null
+  const [coins, reserves] = token
+    ? await Promise.all([fetchCoins(token, debug), fetchReserves(token, debug)])
+    : [null, null]
 
   if (!coins || coins.length === 0) {
     if (debug.length) console.error('[crypto-research] apify:', debug.join(' | '))
@@ -244,7 +327,7 @@ export async function GET() {
     )
   }
 
-  const ai = await generateAI(coins)
+  const ai = await generateAI(coins, reserves)
   const signals = ai?.signals?.length ? ai.signals : coins.map(fallbackSignal)
   const commentary: Commentary[] = ai?.commentary?.length
     ? ai.commentary
@@ -289,6 +372,17 @@ export async function GET() {
       signalTone: sigBySym.get(c.symbol)?.signalTone ?? 'b',
     })),
     commentary,
+    reserves: reserves
+      ? {
+          stablecoinUsd: `$${bn(reserves.stablecoinUsd)}`,
+          ethUsd: `$${bn(reserves.ethUsd)}`,
+          totalUsd: `$${bn(reserves.totalUsd)}`,
+          byExchange: reserves.byExchange.map((e) => ({
+            exchange: e.exchange,
+            usd: `$${bn(e.usd)}`,
+          })),
+        }
+      : null,
   }
 
   responseCache = { at: Date.now(), body }
