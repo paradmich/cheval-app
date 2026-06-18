@@ -93,6 +93,26 @@ export default function LiveAgents() {
           </div>
         ))
       )}
+
+      {data && data.history && data.history.length > 0 ? (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+          <div className="lbl" style={{ marginBottom: 8 }}>Recent agent activity</div>
+          {data.history.slice(0, 8).map((h, i) => (
+            <div
+              key={i}
+              className="sans"
+              style={{ display: 'flex', gap: 9, alignItems: 'baseline', padding: '3.5px 0', fontSize: 11.5, borderBottom: '1px solid var(--line)' }}
+            >
+              <span style={{ color: 'var(--gold)' }}>●</span>
+              <span style={{ color: 'var(--mut)', width: 150, flexShrink: 0 }}>
+                {agents.find((a) => a.id === h.id)?.name ?? h.id}
+              </span>
+              <span style={{ color: 'var(--txt)', flex: 1 }}>{h.headline}</span>
+              <span style={{ color: 'var(--mut)', flexShrink: 0 }}>{ago(h.at)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
