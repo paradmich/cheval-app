@@ -153,31 +153,150 @@ async function runCioBrief(desks: AgentRun[], now: string): Promise<AgentRun> {
   return base
 }
 
+async function runEndpointAgent(a: AgentDef, origin: string, now: string): Promise<AgentRun> {
+  try {
+    const res = await fetch(`${origin}${a.endpoint}`, { cache: 'no-store' })
+    const d = (await res.json()) as Json
+    return { id: a.id, name: a.name, lastRunISO: now, ...a.map(d) }
+  } catch (e) {
+    return {
+      id: a.id,
+      name: a.name,
+      lastRunISO: now,
+      status: 'Idle',
+      headline: 'Run failed',
+      finding: `Could not complete scan: ${String(e).slice(0, 80)}`,
+      detail: null,
+    }
+  }
+}
+
+const APIFY_TRUMP_ACTOR = 'muhammetakkurtt~truth-social-scraper'
+
+const TRUMP_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    marketRelevant: { type: 'boolean', description: 'true if any recent post is plausibly market-moving' },
+    headline: { type: 'string', description: '≤8 words; the market angle, or "No market-moving posts"' },
+    finding: { type: 'string', description: 'What he said + the market read, or that posts are political/non-market' },
+    assets: { type: 'string', description: 'Affected assets/sectors, or "—"' },
+    link: { type: 'string', description: 'URL of the key post, or empty string' },
+  },
+  required: ['marketRelevant', 'headline', 'finding', 'assets', 'link'],
+} as const
+
+interface TruthPost {
+  content?: string
+  created_at?: string
+  url?: string
+}
+
 /**
- * Run every desk agent (fresh) + the CIO synthesis, persist each, and return
- * the runs with the CIO brief first (leads the dashboard and the email).
+ * Trump Market Monitor: scrapes recent @realDonaldTrump Truth Social posts and
+ * has Claude surface ONLY the market-relevant ones (tariffs, Fed, dollar,
+ * single stocks, crypto, oil, China, fiscal) — most posts are political noise.
+ * Status = Alert when a market-moving post is found.
+ */
+async function runTrumpMonitor(token: string, now: string): Promise<AgentRun> {
+  const base: AgentRun = {
+    id: 'trump-monitor',
+    name: 'Trump Market Monitor',
+    lastRunISO: now,
+    status: 'Idle',
+    headline: 'Monitor unavailable',
+    finding: 'Could not fetch Truth Social posts.',
+    detail: null,
+  }
+
+  let posts: TruthPost[] = []
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 55_000)
+  try {
+    const res = await fetch(
+      `https://api.apify.com/v2/acts/${APIFY_TRUMP_ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=55`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: ctrl.signal,
+        body: JSON.stringify({ username: 'realDonaldTrump', maxPosts: 15, cleanContent: true }),
+      },
+    )
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items)) posts = items as TruthPost[]
+    }
+  } catch {
+    /* leave base */
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const texts = posts
+    .map((p) => ({ when: p.created_at, text: (p.content ?? '').trim(), url: p.url }))
+    .filter((p) => p.text)
+
+  if (texts.length === 0) {
+    return { ...base, status: 'Active', headline: 'No new posts', finding: 'No recent Truth Social posts to assess.' }
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ...base, status: 'Active', headline: `${texts.length} recent posts`, finding: 'Set ANTHROPIC_API_KEY to classify posts for market relevance.' }
+  }
+
+  try {
+    const client = new Anthropic()
+    const res = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 1024,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: TRUMP_SCHEMA } },
+      system:
+        'You monitor Donald Trump\'s recent Truth Social posts for a private wealth office, ' +
+        'looking ONLY for content that could move financial markets — tariffs/trade, the ' +
+        'Fed/Powell/interest rates, the US dollar, specific public companies or stocks, crypto, ' +
+        'oil/energy, China, taxes/fiscal policy, or major geopolitical/economic announcements. ' +
+        'Most of his posts are political/campaign content with NO market relevance — say so ' +
+        'plainly when that is the case. When a post IS market-relevant, summarize what he ' +
+        'actually said and the likely market read (which assets, direction). Research only; ' +
+        'never instruct to trade.',
+      messages: [
+        { role: 'user', content: `Recent posts (newest first, JSON):\n${JSON.stringify(texts.slice(0, 15), null, 2)}` },
+      ],
+    })
+    const text = res.content.find((b) => b.type === 'text')
+    if (text && text.type === 'text') {
+      const j = JSON.parse(text.text) as {
+        marketRelevant: boolean
+        headline: string
+        finding: string
+        assets: string
+        link: string
+      }
+      base.status = j.marketRelevant ? 'Alert' : 'Active'
+      base.headline = j.headline || (j.marketRelevant ? 'Market-relevant post' : 'No market-moving posts')
+      base.finding = j.finding || ''
+      base.detail =
+        [j.assets && j.assets !== '—' ? `Assets: ${j.assets}` : null, j.link || null]
+          .filter(Boolean)
+          .join(' · ') || null
+    }
+  } catch {
+    return { ...base, status: 'Active', headline: 'Classification failed', finding: `Fetched ${texts.length} posts but could not classify.` }
+  }
+  return base
+}
+
+/**
+ * Run every desk agent (fresh) — the 3 research desks + the Trump monitor — plus
+ * the CIO synthesis. Persist each and return with the CIO brief first (leads the
+ * dashboard and the email).
  */
 export async function runAllAgents(origin: string, token: string): Promise<AgentRun[]> {
   const now = new Date().toISOString()
-  const desks = await Promise.all(
-    AGENTS.map(async (a): Promise<AgentRun> => {
-      try {
-        const res = await fetch(`${origin}${a.endpoint}`, { cache: 'no-store' })
-        const d = (await res.json()) as Json
-        return { id: a.id, name: a.name, lastRunISO: now, ...a.map(d) }
-      } catch (e) {
-        return {
-          id: a.id,
-          name: a.name,
-          lastRunISO: now,
-          status: 'Idle',
-          headline: 'Run failed',
-          finding: `Could not complete scan: ${String(e).slice(0, 80)}`,
-          detail: null,
-        }
-      }
-    }),
-  )
+  const desks = await Promise.all([
+    ...AGENTS.map((a) => runEndpointAgent(a, origin, now)),
+    runTrumpMonitor(token, now),
+  ])
   await Promise.all(desks.map((r) => writeAgentRun(token, r)))
   const cio = await runCioBrief(desks, now)
   await writeAgentRun(token, cio)

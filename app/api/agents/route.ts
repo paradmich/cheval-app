@@ -10,7 +10,7 @@ export async function GET() {
   const token = process.env.APIFY_TOKEN
   if (!token) return Response.json({ agents: [], history: [], configured: false })
   const state = await readAgentState(token)
-  const order = ['cio-brief', 'fx-research', 'crypto-research', 'stock-research']
+  const order = ['cio-brief', 'trump-monitor', 'fx-research', 'crypto-research', 'stock-research']
   const agents = Object.values(state.agents).sort(
     (a, b) => (order.indexOf(a.id) + 1 || 99) - (order.indexOf(b.id) + 1 || 99),
   )
