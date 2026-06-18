@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { writeAgentRun, type AgentRun } from './agentStore'
+import { supaEnv, supaFetch } from './supabaseRest'
 
 /**
  * Shared autonomous-agent runner. Each agent reuses its live research endpoint,
@@ -295,19 +296,205 @@ async function runTrumpMonitor(token: string, now: string): Promise<AgentRun> {
   return base
 }
 
+function fmtUsd(n: number): string {
+  if (!n) return '$0'
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
+  if (n >= 1e3) return `$${Math.round(n / 1e3)}K`
+  return `$${n}`
+}
+
+const BRIEF_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    headline: { type: 'string', description: '≤8 words' },
+    finding: { type: 'string', description: '2–3 sentences' },
+    note: { type: 'string', description: 'One line: what to watch / next step' },
+  },
+  required: ['headline', 'finding', 'note'],
+} as const
+
 /**
- * Run every desk agent (fresh) — the 3 research desks + the Trump monitor — plus
- * the CIO synthesis. Persist each and return with the CIO brief first (leads the
- * dashboard and the email).
+ * Macro & Policy monitor (market desk → feeds the CIO). Reuses the FX research
+ * payload (calendar, central banks, headlines, macro levels) but reads it
+ * through a POLICY lens — central banks, fiscal, geopolitics — distinct from
+ * the FX pair view. Alert when a high-impact policy event is within a day.
+ */
+async function runMacroPolicy(origin: string, now: string): Promise<AgentRun> {
+  const base: AgentRun = { id: 'macro-policy', name: 'Macro & Policy Monitor', lastRunISO: now, status: 'Active', headline: 'Macro scan complete', finding: '', detail: null }
+  let d: Json = {}
+  try {
+    const r = await fetch(`${origin}/api/fx-research`, { cache: 'no-store' })
+    d = (await r.json()) as Json
+  } catch {
+    /* no context */
+  }
+  const stats = obj(d.stats)
+  const next = stats.nextHighImpact ? obj(stats.nextHighImpact) : null
+  const inDays = next ? num(next.inDays) : null
+  base.status = next != null && inDays != null && inDays <= 1 ? 'Alert' : 'Active'
+  const h0 = obj(arr(d.headlines)[0])
+  if (str(h0.url)) {
+    base.sourceUrl = str(h0.url)
+    base.sourceLabel = str(h0.title).slice(0, 72) || 'Top headline'
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    base.headline = next ? `Next: ${str(next.event)}` : 'Macro snapshot'
+    return base
+  }
+  try {
+    const client = new Anthropic()
+    const ctx = {
+      calendar: arr(d.calendar).slice(0, 6).map((e) => ({ when: str(e.when), event: str(e.event), ccy: str(e.ccy), impact: str(e.impact) })),
+      centralBanks: arr(d.centralBanks).map((b) => ({ name: str(b.name), rate: str(b.rate), bias: str(b.bias) })),
+      headlines: arr(d.headlines).map((h) => str(h.title)),
+      macro: { dxy: str(stats.dxy), us10yPct: num(stats.us10yPct), vix: num(stats.vix) },
+    }
+    const res = await client.messages.create({
+      model: 'claude-opus-4-8', max_tokens: 1024, thinking: { type: 'adaptive' },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: BRIEF_SCHEMA } },
+      system:
+        'You are the Macro & Policy monitor for a private wealth office. Focus on ' +
+        'CENTRAL-BANK POLICY (Fed/ECB/BoJ/BoE), fiscal/Treasury, geopolitics, and the ' +
+        'economic calendar — NOT individual FX pairs. Name the dominant policy theme, the ' +
+        'key upcoming policy event, and what to watch. Concise, institutional. Research only.',
+      messages: [{ role: 'user', content: `Macro context (JSON):\n${JSON.stringify(ctx, null, 2)}` }],
+    })
+    const t = res.content.find((b) => b.type === 'text')
+    if (t && t.type === 'text') {
+      const j = JSON.parse(t.text) as { headline: string; finding: string; note: string }
+      base.headline = j.headline || base.headline
+      base.finding = j.finding || ''
+      base.detail = j.note ? `Watch: ${j.note}` : null
+    }
+  } catch {
+    /* keep base */
+  }
+  return base
+}
+
+/**
+ * Capital Raising agent (ops desk). Reads the live LP pipeline from Supabase
+ * (active LPs + commitments, prospects + potential) and the capital-markets
+ * headlines, and frames where the Cheval RE Fund II raise stands + a next step.
+ */
+async function runCapitalRaising(origin: string, now: string): Promise<AgentRun> {
+  const base: AgentRun = { id: 'capital-raising', name: 'Capital Raising Agent', lastRunISO: now, status: 'Active', headline: 'Pipeline scan complete', finding: '', detail: null }
+  let prospects = 0, actives = 0, committed = 0, potential = 0
+  const { url, key } = supaEnv()
+  if (url && key) {
+    try {
+      const r = await supaFetch('cheval_investors', '?select=status,commitment', { method: 'GET' }, url, key)
+      if (r.ok) {
+        for (const x of (await r.json()) as { status: string | null; commitment: number | null }[]) {
+          if (x.status === 'Prospect') { prospects++; potential += x.commitment ?? 0 }
+          else { actives++; committed += x.commitment ?? 0 }
+        }
+      }
+    } catch {
+      /* pipeline unknown */
+    }
+  }
+  let env: string[] = []
+  try {
+    const r = await fetch(`${origin}/api/fx-research`, { cache: 'no-store' })
+    env = arr((await r.json()).headlines).map((h) => str(h.title)).slice(0, 6)
+  } catch {
+    /* no env */
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    base.headline = `${actives} LPs · ${prospects} prospects`
+    base.finding = `Committed ${fmtUsd(committed)}; prospect potential ${fmtUsd(potential)} toward the Cheval RE Fund II $5M target.`
+    base.detail = prospects === 0 ? 'Add prospects in the Investor Directory.' : null
+    return base
+  }
+  try {
+    const client = new Anthropic()
+    const data = { fundTarget: '$5M (Cheval RE Fund II)', activeLPs: actives, committedUsd: committed, prospects, prospectPotentialUsd: potential, capitalEnvironmentHeadlines: env }
+    const res = await client.messages.create({
+      model: 'claude-opus-4-8', max_tokens: 1024, thinking: { type: 'adaptive' },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: BRIEF_SCHEMA } },
+      system:
+        'You are the Capital Raising agent for Cheval Holdings, raising Cheval RE Fund II ' +
+        '($5M target). Given the live LP pipeline (active LPs + committed, prospects + ' +
+        'potential) and the capital-markets environment, summarize where the raise stands ' +
+        'and recommend ONE focused next step. If the pipeline is empty, say so and suggest ' +
+        'building the prospect list in the Investor Directory. Ops/research only; no advice.',
+      messages: [{ role: 'user', content: JSON.stringify(data, null, 2) }],
+    })
+    const t = res.content.find((b) => b.type === 'text')
+    if (t && t.type === 'text') {
+      const j = JSON.parse(t.text) as { headline: string; finding: string; note: string }
+      base.headline = j.headline || base.headline
+      base.finding = j.finding || ''
+      base.detail = j.note || null
+    }
+  } catch {
+    /* keep base */
+  }
+  return base
+}
+
+/**
+ * Compliance & Calendar agent (ops desk, deterministic — no model call). A
+ * configurable annual checklist of fund/family-office obligations; surfaces the
+ * soonest items. Alert when something is due within 14 days. Not legal advice.
+ */
+const OBLIGATIONS: { label: string; m: number; d: number }[] = [
+  { label: 'Quarterly LP report (Q4)', m: 1, d: 30 },
+  { label: 'CTA beneficial-ownership review', m: 1, d: 31 },
+  { label: 'Schedule K-1s to LPs', m: 3, d: 15 },
+  { label: 'Form ADV annual update', m: 3, d: 30 },
+  { label: 'Annual audit / financial statements', m: 3, d: 31 },
+  { label: 'Estimated taxes — Q1', m: 4, d: 15 },
+  { label: 'Quarterly LP report (Q1)', m: 4, d: 30 },
+  { label: 'Estimated taxes — Q2', m: 6, d: 15 },
+  { label: 'Quarterly LP report (Q2)', m: 7, d: 30 },
+  { label: 'Estimated taxes — Q3', m: 9, d: 15 },
+  { label: 'Quarterly LP report (Q3)', m: 10, d: 30 },
+  { label: 'Estimated taxes — Q4 (next yr)', m: 1, d: 15 },
+]
+
+function runCompliance(now: string): AgentRun {
+  const today = new Date(now)
+  const base = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  const y = today.getUTCFullYear()
+  const items = OBLIGATIONS.map((o) => {
+    let due = Date.UTC(y, o.m - 1, o.d)
+    if (due < base) due = Date.UTC(y + 1, o.m - 1, o.d)
+    return { label: o.label, inDays: Math.round((due - base) / 86_400_000) }
+  }).sort((a, b) => a.inDays - b.inDays)
+  const fmt = (n: number) => (n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n}d`)
+  const soonest = items[0]
+  return {
+    id: 'compliance',
+    name: 'Compliance & Calendar',
+    lastRunISO: now,
+    status: soonest.inDays <= 14 ? 'Alert' : 'Active',
+    headline: `${soonest.label} ${fmt(soonest.inDays)}`,
+    finding: items.slice(0, 4).map((i) => `${i.label} (${fmt(i.inDays)})`).join(' · '),
+    detail: `${OBLIGATIONS.length} obligations tracked · configurable checklist`,
+    sourceUrl: null,
+    sourceLabel: null,
+  }
+}
+
+/**
+ * Run all agents (fresh): market desks (FX, Crypto, Equity, Trump, Macro) feed
+ * the CIO synthesis; ops desks (Capital Raising, Compliance) run alongside.
+ * Persist each; return with the CIO brief first.
  */
 export async function runAllAgents(origin: string, token: string): Promise<AgentRun[]> {
   const now = new Date().toISOString()
-  const desks = await Promise.all([
+  const marketDesks = await Promise.all([
     ...AGENTS.map((a) => runEndpointAgent(a, origin, now)),
     runTrumpMonitor(token, now),
+    runMacroPolicy(origin, now),
   ])
-  await Promise.all(desks.map((r) => writeAgentRun(token, r)))
-  const cio = await runCioBrief(desks, now)
+  const opsDesks = [await runCapitalRaising(origin, now), runCompliance(now)]
+  const all = [...marketDesks, ...opsDesks]
+  await Promise.all(all.map((r) => writeAgentRun(token, r)))
+  const cio = await runCioBrief(marketDesks, now)
   await writeAgentRun(token, cio)
-  return [cio, ...desks]
+  return [cio, ...all]
 }
