@@ -9,7 +9,7 @@ import { writeAgentRun, type AgentRun } from './agentStore'
  */
 
 type Json = Record<string, unknown>
-type Fields = Pick<AgentRun, 'status' | 'headline' | 'finding' | 'detail'>
+type Fields = Pick<AgentRun, 'status' | 'headline' | 'finding' | 'detail' | 'sourceUrl' | 'sourceLabel'>
 
 interface AgentDef {
   id: string
@@ -29,6 +29,8 @@ function fxFields(d: Json): Fields {
   const next = stats.nextHighImpact ? obj(stats.nextHighImpact) : null
   const inDays = next ? num(next.inDays) : null
   const imminent = next != null && inDays != null && inDays <= 1
+  const h0 = obj(arr(d.headlines)[0]) // top news headline grounding the read
+  const url = str(h0.url)
   return {
     status: !d.live ? 'Idle' : imminent ? 'Alert' : 'Active',
     headline: str(top.title) || 'FX market scan complete',
@@ -36,6 +38,8 @@ function fxFields(d: Json): Fields {
     detail: next
       ? `Next high-impact: ${str(next.event)} (${inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays}d`})`
       : null,
+    sourceUrl: url || null,
+    sourceLabel: url ? str(h0.title).slice(0, 72) || 'Top headline' : null,
   }
 }
 
@@ -275,10 +279,11 @@ async function runTrumpMonitor(token: string, now: string): Promise<AgentRun> {
       base.status = j.marketRelevant ? 'Alert' : 'Active'
       base.headline = j.headline || (j.marketRelevant ? 'Market-relevant post' : 'No market-moving posts')
       base.finding = j.finding || ''
-      base.detail =
-        [j.assets && j.assets !== '—' ? `Assets: ${j.assets}` : null, j.link || null]
-          .filter(Boolean)
-          .join(' · ') || null
+      base.detail = j.assets && j.assets !== '—' ? `Assets: ${j.assets}` : null
+      if (j.link) {
+        base.sourceUrl = j.link
+        base.sourceLabel = 'Read the post on Truth Social'
+      }
     }
   } catch {
     return { ...base, status: 'Active', headline: 'Classification failed', finding: `Fetched ${texts.length} posts but could not classify.` }

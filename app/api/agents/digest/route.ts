@@ -18,6 +18,11 @@ function authorized(req: Request): boolean {
 
 const TONE: Record<string, string> = { Active: '#3a8a4f', Alert: '#b3261e', Idle: '#8a8a8a' }
 
+function sourceLink(a: AgentRun): string {
+  if (!a.sourceUrl) return ''
+  return `<div style="margin-top:7px;"><a href="${a.sourceUrl}" target="_blank" style="font:600 12px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#b08a3e;text-decoration:none;">↗ ${a.sourceLabel || 'View source'}</a></div>`
+}
+
 function agentBlock(a: AgentRun): string {
   const color = TONE[a.status] ?? '#8a8a8a'
   return `
@@ -29,6 +34,7 @@ function agentBlock(a: AgentRun): string {
       <div style="font:600 15px/1.4 Georgia,serif;color:#1d1b16;margin:7px 0 4px;">${a.headline}</div>
       <div style="font:400 13px/1.6 -apple-system,Helvetica,Arial,sans-serif;color:#4a463f;">${a.finding}</div>
       ${a.detail ? `<div style="font:400 12px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#9a9488;margin-top:5px;">${a.detail}</div>` : ''}
+      ${sourceLink(a)}
     </td></tr>`
 }
 

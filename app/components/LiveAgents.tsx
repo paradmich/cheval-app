@@ -10,6 +10,8 @@ interface AgentRun {
   headline: string
   finding: string
   detail?: string | null
+  sourceUrl?: string | null
+  sourceLabel?: string | null
 }
 interface AgentsData {
   configured: boolean
@@ -72,6 +74,17 @@ export default function LiveAgents() {
                 <b>{a.headline}.</b> {a.finding}
                 {a.detail ? <span className="muted"> · {a.detail}</span> : null}
               </div>
+              {a.sourceUrl ? (
+                <a
+                  href={a.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link"
+                  style={{ display: 'inline-block', marginTop: 4 }}
+                >
+                  ↗ {a.sourceLabel || 'View source'}
+                </a>
+              ) : null}
             </div>
             <div className="meta">
               <span className={`pill ${statusTone[a.status] ?? 'm'}`}>{a.status}</span>

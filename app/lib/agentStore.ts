@@ -19,6 +19,9 @@ export interface AgentRun {
   headline: string
   finding: string
   detail?: string | null
+  /** A clickable source for the finding (Trump post, news article, etc.). */
+  sourceUrl?: string | null
+  sourceLabel?: string | null
 }
 
 export interface AgentState {
