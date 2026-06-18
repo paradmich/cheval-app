@@ -9,6 +9,7 @@ import StockResearch from './components/StockResearch'
 import LiveAgents from './components/LiveAgents'
 import SbaLoans from './components/SbaLoans'
 import InvestorRelations from './components/InvestorRelations'
+import TradingAccounts from './components/TradingAccounts'
 
 /**
  * Renders the Cheval Holdings mockup. The static markup is injected once via
@@ -33,6 +34,7 @@ const LIVE_SECTIONS: { id: string; node: ReactNode; prepend?: boolean }[] = [
   { id: 'agents', node: <LiveAgents />, prepend: true },
   { id: 'financing', node: <SbaLoans />, prepend: true },
   { id: 'ir', node: <InvestorRelations />, prepend: true },
+  { id: 'trading', node: <TradingAccounts />, prepend: true },
 ]
 
 export default function Page() {
