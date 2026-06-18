@@ -266,10 +266,13 @@ export async function GET() {
   const topMover = movers.slice().sort((a, b) => (b.change1d ?? 0) - (a.change1d ?? 0))[0]
   const advancing = holdings.filter((s) => (s.change1d ?? 0) > 0).length
 
+  const sourceSym = topMover?.symbol ?? holdings[0]?.symbol ?? null
   const body = {
     stockLive: true,
     aiEnabled: !!ai,
     generatedAt: new Date().toISOString(),
+    sourceUrl: sourceSym ? `https://finance.yahoo.com/quote/${sourceSym}` : null,
+    sourceLabel: sourceSym ? `${sourceSym} on Yahoo Finance` : null,
     stats: {
       indices: indices.map((i) => ({
         label: i.label,

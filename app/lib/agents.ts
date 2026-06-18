@@ -61,6 +61,8 @@ function cryptoFields(d: Json): Fields {
       : mover.symbol
         ? `Top mover ${str(mover.symbol)}`
         : null,
+    sourceUrl: str(d.sourceUrl) || null,
+    sourceLabel: str(d.sourceLabel) || null,
   }
 }
 
@@ -84,6 +86,8 @@ function stockFields(d: Json): Fields {
     headline: str(top.title) || 'Equity market scan complete',
     finding: str(top.body),
     detail: detail || null,
+    sourceUrl: str(d.sourceUrl) || null,
+    sourceLabel: str(d.sourceLabel) || null,
   }
 }
 

@@ -347,10 +347,13 @@ export async function GET() {
   const topMover = movers.slice().sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))[0]
   const watchlistMcap = coins.reduce((s, c) => s + (c.marketCap || 0), 0)
 
+  const srcCoin = topMover ?? btc ?? coins[0]
   const body = {
     cryptoLive: true,
     aiEnabled: !!ai,
     generatedAt: new Date().toISOString(),
+    sourceUrl: srcCoin ? `https://www.coingecko.com/en/coins/${srcCoin.id}` : null,
+    sourceLabel: srcCoin ? `${srcCoin.symbol} on CoinGecko` : null,
     stats: {
       btc: btc ? { price: fmtPrice(btc.price), change24h: btc.change24h } : null,
       eth: eth ? { price: fmtPrice(eth.price), change24h: eth.change24h } : null,
