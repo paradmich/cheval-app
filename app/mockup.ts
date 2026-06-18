@@ -109,11 +109,7 @@ export const BODY = `<div class="app">
           <div class="item"><div class="ico">🧾</div><div><div class="t">Tax &amp; Reporting Agent</div><div class="s">Statements + tax package</div></div><div class="meta"><span class="pill g">Active</span><div class="dd">Drafted net worth</div></div></div>
           <div class="item"><div class="ico">🛡️</div><div><div class="t">Oversight Agent</div><div class="s">Access, anomalies, read-only enforce</div></div><div class="meta"><span class="pill g">Active</span><div class="dd">No anomalies</div></div></div></div>
       </div>
-      <div class="card ai"><div class="ch"><h3>✦ Recent Agent Activity</h3><span class="link">Ask the agents →</span></div>
-        <div class="item"><div class="ico" style="background:var(--red-soft)">💵</div><div><div class="t">Liquidity Agent flagged a capital call</div><div class="s">Meridian — $250K due Jun 14 · coverage 3.0x</div></div><div class="meta"><span class="pill r">Review</span><div class="dd">12m ago</div></div></div>
-        <div class="item"><div class="ico">📊</div><div><div class="t">FX Research Agent posted pre-CPI commentary</div><div class="s">USD soft into print · reduce size</div></div><div class="meta"><div class="dd">1h ago</div></div></div>
-        <div class="item"><div class="ico">🤝</div><div><div class="t">IR Agent sent Q2 investor update</div><div class="s">Austin 4-unit · 6/6 opened</div></div><div class="meta"><div class="dd">3h ago</div></div></div>
-        <div class="item"><div class="ico">🤖</div><div><div class="t">AI Licensing Agent onboarded a licensee</div><div class="s">Apex Capital · annual · +$11.5K ARR</div></div><div class="meta"><div class="dd">Today</div></div></div></div>
+      <!-- static "Recent Agent Activity" removed — the real feed lives in the Live Agents panel at the top of this view -->
       <p class="muted sans" style="margin-top:14px;font-size:11px">Every agent runs <b>read-only</b> — it analyzes, alerts, and drafts; you approve any action. Powered by the same AI agent layer (Anthropic) used across your other apps.</p>
     </section>
 
