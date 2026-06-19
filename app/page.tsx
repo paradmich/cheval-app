@@ -7,6 +7,7 @@ import FxResearch from './components/FxResearch'
 import CryptoResearch from './components/CryptoResearch'
 import StockResearch from './components/StockResearch'
 import LiveAgents from './components/LiveAgents'
+import Acquisitions from './components/Acquisitions'
 import SbaLoans from './components/SbaLoans'
 import InvestorRelations from './components/InvestorRelations'
 import TradingAccounts from './components/TradingAccounts'
@@ -35,6 +36,7 @@ const LIVE_SECTIONS: { id: string; node: ReactNode; prepend?: boolean }[] = [
   { id: 'agents', node: <LiveAgents />, prepend: true },
   { id: 'financing', node: <SbaLoans />, prepend: true },
   { id: 'ir', node: <InvestorRelations />, prepend: true },
+  { id: 'acquisitions', node: <Acquisitions /> },
   { id: 'trading', node: <TradingAccounts />, prepend: true },
   { id: 'trading', node: <TradingViewChart />, prepend: true },
 ]

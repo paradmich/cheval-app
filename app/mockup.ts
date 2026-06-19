@@ -20,7 +20,8 @@ export const BODY = `<div class="app">
       <div class="nav" data-v="cryptoresearch"><span class="ic">🔗</span> Crypto Research</div></div>
     <div class="navgrp"><div class="lbl">Holdings</div>
       <div class="nav" data-v="realestate"><span class="ic">🏘️</span> Real Estate</div>
-      <div class="nav" data-v="private"><span class="ic">🏦</span> Private Investments</div></div>
+      <div class="nav" data-v="private"><span class="ic">🏦</span> Private Investments</div>
+      <div class="nav" data-v="acquisitions"><span class="ic">🎯</span> Acquisitions</div></div>
     <div class="navgrp"><div class="lbl">Fund Management</div>
       <div class="nav" data-v="capitalraising"><span class="ic">💰</span> Capital Raising</div>
       <div class="nav" data-v="directory"><span class="ic">📇</span> Investor Directory</div>
@@ -562,6 +563,7 @@ export const BODY = `<div class="app">
     </section>
 
     <!-- ===== PRIVATE INVESTMENTS ===== -->
+    <section class="view" id="acquisitions"></section>
     <section class="view" id="private">
       <div class="grid four stats">
         <div class="card stat"><div class="lbl">Net Asset Value</div><div class="v">$5.30M</div><div class="d up">▲ 1.6x MOIC</div></div>
@@ -821,6 +823,7 @@ export const NAVSCRIPT = `const titles = {
     crypto:['Crypto','3 wallets · 🔒 watch-only — no keys held'],
     realestate:['Real Estate','2 properties · valuations &amp; income'],
     private:['Private Investments','4 positions · funds &amp; direct deals'],
+    acquisitions:['Acquisitions','Buy box · deal pipeline · AI fit scoring'],
     licensing:['AI Licensing — Trading','Recurring revenue line'],
     vault:['Documents &amp; Reports','Reports &amp; statements + encrypted document vault'],
     security:['Security &amp; Access','Posture, connections, audit log'],
