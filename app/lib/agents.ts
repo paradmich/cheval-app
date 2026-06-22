@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { writeAgentRun, type AgentRun } from './agentStore'
+import { writeAgentRuns, type AgentRun } from './agentStore'
 import { supaEnv, supaFetch } from './supabaseRest'
 
 /**
@@ -493,8 +493,7 @@ export async function runAllAgents(origin: string, token: string): Promise<Agent
   ])
   const opsDesks = [await runCapitalRaising(origin, now), runCompliance(now)]
   const all = [...marketDesks, ...opsDesks]
-  await Promise.all(all.map((r) => writeAgentRun(r)))
   const cio = await runCioBrief(marketDesks, now)
-  await writeAgentRun(cio)
+  await writeAgentRuns([...all, cio])
   return [cio, ...all]
 }

@@ -44,15 +44,22 @@ export async function readAgentState(): Promise<AgentState> {
   }
 }
 
-/** Upsert one agent's run into the stored state (keeps last 12 history items). */
-export async function writeAgentRun(run: AgentRun): Promise<boolean> {
+/**
+ * Persist a batch of agent runs in ONE upsert. Always write all runs from a
+ * cycle together — never call this concurrently for the same row, or parallel
+ * upserts to the single 'state' key clobber each other.
+ */
+export async function writeAgentRuns(runs: AgentRun[]): Promise<boolean> {
   const { url, key } = supaEnv()
-  if (!url || !key) return false
+  if (!url || !key || runs.length === 0) return false
   const prev = await readAgentState()
-  const next: AgentState = {
-    agents: { ...prev.agents, [run.id]: run },
-    history: [{ id: run.id, at: run.lastRunISO, headline: run.headline }, ...prev.history].slice(0, 12),
+  const agents = { ...prev.agents }
+  let history = prev.history
+  for (const run of runs) {
+    agents[run.id] = run
+    history = [{ id: run.id, at: run.lastRunISO, headline: run.headline }, ...history]
   }
+  const next: AgentState = { agents, history: history.slice(0, 12) }
   try {
     const res = await supaFetch(
       'cheval_agent_state',
@@ -69,4 +76,9 @@ export async function writeAgentRun(run: AgentRun): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** Convenience for a single run. */
+export function writeAgentRun(run: AgentRun): Promise<boolean> {
+  return writeAgentRuns([run])
 }
