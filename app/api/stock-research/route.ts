@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const ACTOR = 'ryanclinton~finnhub-stock-data'
-const CACHE_TTL_MS = 15 * 60 * 1000
+const CACHE_TTL_MS = 60 * 60 * 1000
 let responseCache: { at: number; body: unknown } | null = null
 
 type PillTone = 'g' | 'r' | 'b' | 'gold' | 'm'

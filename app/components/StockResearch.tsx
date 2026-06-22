@@ -78,11 +78,14 @@ export default function StockResearch() {
   if (!data) return <p className="muted sans" style={{ padding: 4 }}>Loading live stock research…</p>
   if (!data.stockLive || !data.stats || !data.watchlist) {
     return (
-      <p className="muted sans" style={{ padding: 4 }}>
-        {data.needsKey
-          ? 'Live equity feed requires a free FINNHUB_API_KEY (plus APIFY_TOKEN). Add it to enable the Finnhub feed.'
-          : 'Live equity feed is temporarily unavailable. Try again shortly.'}
-      </p>
+      <div className="card" style={{ padding: 16 }}>
+        <div className="ch"><h3>Equity feed paused</h3></div>
+        <p className="muted sans" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          {data.needsKey
+            ? 'Live equity feed needs a free FINNHUB_API_KEY (plus APIFY_TOKEN) in the project env.'
+            : 'The live Finnhub feed isn’t responding — most often because the Apify account hit its monthly usage limit. Raise it in the Apify console (Settings → Limits → Monthly usage), or wait for the cycle to reset, and the data returns automatically.'}
+        </p>
+      </div>
     )
   }
 

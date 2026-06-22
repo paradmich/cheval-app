@@ -54,7 +54,7 @@ const PAIR_TO_SYMBOL: Record<Pair, string> = {
   'USD/CHF': 'USDCHF',
 }
 
-const CACHE_TTL_MS = 15 * 60 * 1000
+const CACHE_TTL_MS = 60 * 60 * 1000
 let responseCache: { at: number; body: unknown } | null = null
 
 // DXY = trade-weighted USD index. Geometric weights per the ICE definition.

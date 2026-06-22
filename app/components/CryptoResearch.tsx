@@ -81,9 +81,14 @@ export default function CryptoResearch() {
   if (!data) return <p className="muted sans" style={{ padding: 4 }}>Loading live crypto research…</p>
   if (!data.cryptoLive || !data.stats || !data.watchlist) {
     return (
-      <p className="muted sans" style={{ padding: 4 }}>
-        Live crypto market feed requires <code>APIFY_TOKEN</code>. Add it to enable the CoinGecko feed.
-      </p>
+      <div className="card" style={{ padding: 16 }}>
+        <div className="ch"><h3>Crypto feed paused</h3></div>
+        <p className="muted sans" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          The live CoinGecko feed isn&apos;t responding — most often because the Apify account hit its
+          monthly usage limit. Raise the limit in the Apify console (Settings → Limits → Monthly
+          usage), or wait for the cycle to reset, and the data returns automatically.
+        </p>
+      </div>
     )
   }
 

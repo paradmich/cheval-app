@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 
 interface AgentRun {
   id: string
@@ -28,16 +28,24 @@ function ago(iso: string): string {
   return `${Math.round(mins / 1440)}d ago`
 }
 const statusTone: Record<string, string> = { Active: 'g', Alert: 'r', Idle: 'm' }
+const inp: CSSProperties = { flex: 1, padding: '7px 9px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--card2)', color: 'var(--txt)', fontSize: 12.5, fontFamily: "'Helvetica Neue',sans-serif" }
 
 /**
- * Live panel for the AI Agents view: shows agents that actually run on a
- * schedule (via Vercel Cron → /api/agents/run), with their real last-run time
- * and latest finding — distinct from the static agent mockup below it.
+ * Live panel for the AI Agents view: shows the agents that run on a schedule
+ * (via Vercel Cron → /api/agents/run) with their real status + latest finding,
+ * and lets you ASK each agent a question (Claude answers as that desk, grounded
+ * in its latest finding — passcode-gated via /api/agents/ask).
  */
 export default function LiveAgents() {
   const [data, setData] = useState<AgentsData | null>(null)
+  const [pass, setPass] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
+    setPass(typeof window !== 'undefined' ? localStorage.getItem('chevalPass') : null)
     let cancelled = false
     fetch('/api/agents')
       .then((r) => r.json())
@@ -48,48 +56,101 @@ export default function LiveAgents() {
     }
   }, [])
 
+  async function ask(agentId: string) {
+    const question = q.trim()
+    if (!question || !pass) return
+    setBusy(agentId)
+    setAnswers((a) => ({ ...a, [agentId]: '' }))
+    try {
+      const res = await fetch('/api/agents/ask', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-cheval-pass': pass },
+        body: JSON.stringify({ agentId, question }),
+      })
+      const d = await res.json()
+      setAnswers((a) => ({ ...a, [agentId]: d.answer || d.error || 'No answer.' }))
+    } catch {
+      setAnswers((a) => ({ ...a, [agentId]: 'Could not reach the agent.' }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const agents = data?.agents ?? []
 
   return (
     <div className="card" style={{ marginBottom: 16, borderColor: 'var(--gold-soft)' }}>
       <div className="ch">
-        <h3>● Live Agents <span className="muted sans" style={{ fontWeight: 400 }}>· scheduled, autonomous</span></h3>
-        <span className="muted sans">runs ~3×/day · read-only</span>
+        <h3>● Live Agents <span className="muted sans" style={{ fontWeight: 400 }}>· scheduled · interactive</span></h3>
+        <span className="muted sans">ask any agent · read-only</span>
       </div>
 
       {!data ? (
         <p className="muted sans" style={{ fontSize: 12 }}>Loading agent status…</p>
       ) : agents.length === 0 ? (
         <p className="muted sans" style={{ fontSize: 12 }}>
-          No scheduled runs recorded yet. The FX Research Agent runs on a schedule (a few times
-          daily) and its latest finding will appear here.
+          No scheduled runs recorded yet — agents publish their findings here after their next run.
         </p>
       ) : (
         agents.map((a) => (
-          <div className="item" key={a.id}>
-            <div className="ico" style={{ background: 'var(--gold-soft)' }}>📊</div>
-            <div>
-              <div className="t">{a.name}</div>
-              <div className="s">
-                <b>{a.headline}.</b> {a.finding}
-                {a.detail ? <span className="muted"> · {a.detail}</span> : null}
+          <div key={a.id} style={{ borderBottom: '1px solid var(--line)', padding: '2px 0' }}>
+            <div className="item" style={{ borderBottom: 'none' }}>
+              <div className="ico" style={{ background: 'var(--gold-soft)' }}>📊</div>
+              <div>
+                <div className="t">{a.name}</div>
+                <div className="s">
+                  <b>{a.headline}.</b> {a.finding}
+                  {a.detail ? <span className="muted"> · {a.detail}</span> : null}
+                </div>
+                <div style={{ marginTop: 4, display: 'flex', gap: 12 }}>
+                  {a.sourceUrl ? (
+                    <a href={a.sourceUrl} target="_blank" rel="noopener noreferrer" className="link">↗ {a.sourceLabel || 'View source'}</a>
+                  ) : null}
+                  <span className="link" onClick={() => { setOpen(open === a.id ? null : a.id); setQ('') }}>
+                    {open === a.id ? 'Close' : '💬 Ask'}
+                  </span>
+                </div>
               </div>
-              {a.sourceUrl ? (
-                <a
-                  href={a.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link"
-                  style={{ display: 'inline-block', marginTop: 4 }}
-                >
-                  ↗ {a.sourceLabel || 'View source'}
-                </a>
-              ) : null}
+              <div className="meta">
+                <span className={`pill ${statusTone[a.status] ?? 'm'}`}>{a.status}</span>
+                <div className="dd">ran {ago(a.lastRunISO)}</div>
+              </div>
             </div>
-            <div className="meta">
-              <span className={`pill ${statusTone[a.status] ?? 'm'}`}>{a.status}</span>
-              <div className="dd">ran {ago(a.lastRunISO)}</div>
-            </div>
+
+            {open === a.id ? (
+              <div style={{ padding: '4px 0 12px 46px' }}>
+                {!pass ? (
+                  <p className="muted sans" style={{ fontSize: 11.5 }}>
+                    Unlock a private section (SBA, Investor Relations, or Acquisitions) with the passcode once, then you can chat with agents.
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        className="sans"
+                        style={inp}
+                        placeholder={`Ask the ${a.name}…`}
+                        value={busy === a.id ? '' : q}
+                        disabled={busy === a.id}
+                        onChange={(e) => setQ(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && ask(a.id)}
+                      />
+                      <button
+                        onClick={() => ask(a.id)}
+                        disabled={busy === a.id}
+                        className="sans"
+                        style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--gold)', color: '#fff', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', opacity: busy === a.id ? 0.6 : 1 }}
+                      >
+                        {busy === a.id ? '…' : 'Ask'}
+                      </button>
+                    </div>
+                    {answers[a.id] ? (
+                      <p className="sans" style={{ fontSize: 12, lineHeight: 1.55, marginTop: 8, color: 'var(--txt)' }}>{answers[a.id]}</p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
         ))
       )}

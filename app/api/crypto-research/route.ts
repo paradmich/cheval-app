@@ -20,7 +20,7 @@ export const maxDuration = 60
 const APIFY_CRYPTO_ACTOR = 'gentle_cloud~cryptocurrency-market-data-scraper'
 const APIFY_RESERVE_ACTOR = 'gochujang~cex-reserve-tracker' // exchange reserves (free)
 const STABLES = new Set(['USDT', 'USDC', 'DAI'])
-const CACHE_TTL_MS = 15 * 60 * 1000
+const CACHE_TTL_MS = 60 * 60 * 1000
 let responseCache: { at: number; body: unknown } | null = null
 
 type PillTone = 'g' | 'r' | 'b' | 'gold' | 'm'
