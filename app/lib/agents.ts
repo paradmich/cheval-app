@@ -493,8 +493,8 @@ export async function runAllAgents(origin: string, token: string): Promise<Agent
   ])
   const opsDesks = [await runCapitalRaising(origin, now), runCompliance(now)]
   const all = [...marketDesks, ...opsDesks]
-  await Promise.all(all.map((r) => writeAgentRun(token, r)))
+  await Promise.all(all.map((r) => writeAgentRun(r)))
   const cio = await runCioBrief(marketDesks, now)
-  await writeAgentRun(token, cio)
+  await writeAgentRun(cio)
   return [cio, ...all]
 }

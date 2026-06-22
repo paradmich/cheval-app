@@ -32,8 +32,7 @@ export async function POST(req: Request) {
   const { agentId, question } = (await req.json()) as { agentId?: string; question?: string }
   if (!agentId || !question?.trim()) return Response.json({ error: 'agentId and question required' }, { status: 400 })
 
-  const token = process.env.APIFY_TOKEN ?? ''
-  const state = await readAgentState(token)
+  const state = await readAgentState()
   const agent = state.agents[agentId]
   if (!agent) return Response.json({ error: 'unknown agent' }, { status: 404 })
 

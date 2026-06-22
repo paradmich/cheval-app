@@ -7,9 +7,7 @@ import { readAgentState } from '../../lib/agentStore'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const token = process.env.APIFY_TOKEN
-  if (!token) return Response.json({ agents: [], history: [], configured: false })
-  const state = await readAgentState(token)
+  const state = await readAgentState()
   const order = [
     'cio-brief', 'macro-policy', 'trump-monitor',
     'fx-research', 'crypto-research', 'stock-research',

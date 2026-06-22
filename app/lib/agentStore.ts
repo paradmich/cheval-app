@@ -1,14 +1,13 @@
+import { supaEnv, supaFetch } from './supabaseRest'
+
 /**
- * Tiny persistence layer for autonomous agent state, backed by an Apify
- * key-value store (reuses APIFY_TOKEN — no separate database needed).
- *
- * Scheduled agent runs (via /api/agents/run, triggered by Vercel Cron) write
- * their latest state here; the AI Agents dashboard (/api/agents) reads it. This
- * is what makes an agent "active" rather than only on-demand: it runs on a
- * schedule and its findings persist between page views.
+ * Persistence for autonomous agent state — backed by Supabase (table
+ * `cheval_agent_state`, one JSON row keyed 'state'). Previously this used an
+ * Apify key-value store, but that tied the whole agent layer to Apify usage:
+ * when the Apify monthly limit was hit, even reading agent findings failed.
+ * Supabase keeps the dashboard + Ask working independent of the Apify feeds.
  */
 
-const STORE_NAME = 'cheval-agent-state'
 const STATE_KEY = 'state'
 
 export interface AgentRun {
@@ -31,58 +30,40 @@ export interface AgentState {
 
 const EMPTY: AgentState = { agents: {}, history: [] }
 
-let cachedStoreId: string | null = null
-
-/** Resolve (get-or-create) the named KV store id for the given token. */
-async function storeId(token: string): Promise<string | null> {
-  if (cachedStoreId) return cachedStoreId
+export async function readAgentState(): Promise<AgentState> {
+  const { url, key } = supaEnv()
+  if (!url || !key) return EMPTY
   try {
-    const res = await fetch(
-      `https://api.apify.com/v2/key-value-stores?name=${STORE_NAME}&token=${token}`,
-      { method: 'POST', headers: { 'content-type': 'application/json' } },
-    )
-    if (!res.ok) return null
-    const json = (await res.json()) as { data?: { id?: string } }
-    cachedStoreId = json.data?.id ?? null
-    return cachedStoreId
-  } catch {
-    return null
-  }
-}
-
-export async function readAgentState(token: string): Promise<AgentState> {
-  const id = await storeId(token)
-  if (!id) return EMPTY
-  try {
-    const res = await fetch(
-      `https://api.apify.com/v2/key-value-stores/${id}/records/${STATE_KEY}?token=${token}`,
-    )
-    if (res.status === 404) return EMPTY
+    const res = await supaFetch('cheval_agent_state', `?key=eq.${STATE_KEY}&select=value`, { method: 'GET' }, url, key)
     if (!res.ok) return EMPTY
-    const json = (await res.json()) as Partial<AgentState>
-    return { agents: json.agents ?? {}, history: json.history ?? [] }
+    const rows = (await res.json()) as { value?: Partial<AgentState> }[]
+    const v = rows[0]?.value
+    return { agents: v?.agents ?? {}, history: v?.history ?? [] }
   } catch {
     return EMPTY
   }
 }
 
 /** Upsert one agent's run into the stored state (keeps last 12 history items). */
-export async function writeAgentRun(token: string, run: AgentRun): Promise<boolean> {
-  const id = await storeId(token)
-  if (!id) return false
-  const prev = await readAgentState(token)
+export async function writeAgentRun(run: AgentRun): Promise<boolean> {
+  const { url, key } = supaEnv()
+  if (!url || !key) return false
+  const prev = await readAgentState()
   const next: AgentState = {
     agents: { ...prev.agents, [run.id]: run },
     history: [{ id: run.id, at: run.lastRunISO, headline: run.headline }, ...prev.history].slice(0, 12),
   }
   try {
-    const res = await fetch(
-      `https://api.apify.com/v2/key-value-stores/${id}/records/${STATE_KEY}?token=${token}`,
+    const res = await supaFetch(
+      'cheval_agent_state',
+      '?on_conflict=key',
       {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(next),
+        method: 'POST',
+        headers: { prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({ key: STATE_KEY, value: next, updated_at: new Date().toISOString() }),
       },
+      url,
+      key,
     )
     return res.ok
   } catch {
