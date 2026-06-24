@@ -17,7 +17,8 @@ export const BODY = `<div class="app">
     <div class="navgrp"><div class="lbl">Markets</div>
       <div class="nav" data-v="fxresearch"><span class="ic">📊</span> FX Market Research</div>
       <div class="nav" data-v="stockresearch"><span class="ic">🔎</span> Stock Research</div>
-      <div class="nav" data-v="cryptoresearch"><span class="ic">🔗</span> Crypto Research</div></div>
+      <div class="nav" data-v="cryptoresearch"><span class="ic">🔗</span> Crypto Research</div>
+      <div class="nav" data-v="research"><span class="ic">🔮</span> AI Research</div></div>
     <div class="navgrp"><div class="lbl">Holdings</div>
       <div class="nav" data-v="realestate"><span class="ic">🏘️</span> Real Estate</div>
       <div class="nav" data-v="private"><span class="ic">🏦</span> Private Investments</div>
@@ -394,6 +395,7 @@ export const BODY = `<div class="app">
 
     <!-- ===== CRYPTO RESEARCH ===== -->
     <section class="view" id="cryptoresearch"></section>
+    <section class="view" id="research"></section>
 
     <!-- ===== STOCK RESEARCH ===== -->
     <section class="view" id="stockresearch"></section>
@@ -833,6 +835,7 @@ export const NAVSCRIPT = `const titles = {
     fxresearch:['FX Market Research','Pairs · economic calendar · central banks · AI commentary'],
     stockresearch:['Stock Research','Equities · earnings · sectors · AI commentary'],
     cryptoresearch:['Crypto Research','Coins · on-chain metrics · catalysts · AI commentary'],
+    research:['AI Research','Perplexity Sonar · cited · real-time'],
     financing:['Financing &amp; Leverage','HELOC · velocity banking · lines of credit · infinite banking'],
     thesis:['Investment Thesis','Per-account thesis, rules &amp; review cadence'],
     affiliates:['Affiliate Partnerships','Referral &amp; JV income · commissions · payouts'],
