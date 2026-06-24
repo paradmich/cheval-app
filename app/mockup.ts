@@ -13,7 +13,8 @@ export const BODY = `<div class="app">
       <div class="nav" data-v="longterm"><span class="ic">📈</span> Schwab Account <span class="lock">🔒</span></div>
       <div class="nav" data-v="crypto"><span class="ic">🪙</span> Crypto <span class="lock">🔒</span></div>
       <div class="nav" data-v="cash"><span class="ic">💵</span> Cash &amp; Savings <span class="lock">🔒</span></div>
-      <div class="nav" data-v="financing"><span class="ic">💳</span> Financing &amp; Leverage</div></div>
+      <div class="nav" data-v="financing"><span class="ic">💳</span> Financing &amp; Leverage</div>
+      <div class="nav" data-v="retirement"><span class="ic">🪺</span> Retirement</div></div>
     <div class="navgrp"><div class="lbl">Markets</div>
       <div class="nav" data-v="fxresearch"><span class="ic">📊</span> FX Market Research</div>
       <div class="nav" data-v="stockresearch"><span class="ic">🔎</span> Stock Research</div>
@@ -354,6 +355,7 @@ export const BODY = `<div class="app">
     </section>
 
     <!-- ===== FINANCING & LEVERAGE ===== -->
+    <section class="view" id="retirement"></section>
     <section class="view" id="financing">
       <div class="grid four stats">
         <div class="card stat"><div class="lbl">Credit Available</div><div class="v">$1.08M</div><div class="d up">▲ dry powder</div></div>
@@ -837,6 +839,7 @@ export const NAVSCRIPT = `const titles = {
     cryptoresearch:['Crypto Research','Coins · on-chain metrics · catalysts · AI commentary'],
     research:['AI Research','Perplexity Sonar · cited · real-time'],
     financing:['Financing &amp; Leverage','HELOC · velocity banking · lines of credit · infinite banking'],
+    retirement:['Retirement','401(k) · IRAs · balances · contributions'],
     thesis:['Investment Thesis','Per-account thesis, rules &amp; review cadence'],
     affiliates:['Affiliate Partnerships','Referral &amp; JV income · commissions · payouts'],
     agents:['AI Agents','18 agents across every section · supervised · read-only'],
